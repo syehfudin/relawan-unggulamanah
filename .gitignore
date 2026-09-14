@@ -17,3 +17,5 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+.env.bak.20260914
+*.bak.2026*

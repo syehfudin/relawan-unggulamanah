@@ -58,7 +58,7 @@ class TransaksiController extends Controller
                 'transaksi.tanggal as tanggal_donasi',
                 'p.nama as nama_relawan',
                 'd.nama as nama_donatur',
-                DB::raw('sum(td.nominal_donasi) as total_donasi'),
+                DB::raw('COALESCE(sum(td.nominal_donasi), 0) as total_donasi'),
                 'transaksi.id',
                 DB::raw("case when transaksi.jenis_transaksi = 'transfer' then 'Transfer ke Rek ULAMA' else 'Titip di Relawan' end as jenis_transaksi"),
                 'transaksi.keterangan',
@@ -68,22 +68,23 @@ class TransaksiController extends Controller
                 'transaksi.tanggal',
                 'p.nama',
                 'd.nama',
-                DB::raw("case when transaksi.jenis_transaksi = 'transfer' then 'Transfer ke Rek ULAMA' else 'Titip di Relawan' end"),
+                'transaksi.jenis_transaksi',
                 'transaksi.keterangan',
             ]);
+
         if (in_array($role, ['admin', 'manager'])) {
-            $data = $query->get();
+            // No filter - show all
         } elseif ($role == 'relawan') {
-            $data = $query->where('transaksi.pegawai_id', Auth::user()->pegawai_id)->get();
+            $query->where('transaksi.pegawai_id', Auth::user()->pegawai_id);
         } else {
-            $data = $query->leftJoin('korel as k', function ($join) {
+            $query->leftJoin('korel as k', function ($join) {
                 $join->on('transaksi.pegawai_id', '=', 'k.bawahan_id');
                 $join->orOn('transaksi.pegawai_id', '=', 'k.kepala_id', 'or');
             })
-                ->where('k.kepala_id', Auth::user()->pegawai_id)->get();
+            ->where('k.kepala_id', Auth::user()->pegawai_id);
         }
 
-        return Datatables::of($data)
+        return Datatables::of($query)
             ->addIndexColumn()
             ->addColumn('action', function ($transaksi) {
                 return view('transaksi.action', compact('transaksi'));
@@ -91,6 +92,7 @@ class TransaksiController extends Controller
             ->rawColumns(['action'])
             ->make(true);
     }
+
 
     /**
      * Show the form for creating a new resource.

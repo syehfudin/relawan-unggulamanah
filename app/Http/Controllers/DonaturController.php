@@ -52,32 +52,35 @@ class DonaturController extends Controller
             ]);
 
         if (in_array($role, ['admin', 'manager'])) {
-            $data = $query->get();
+            // No filter - show all
         } elseif ($role == 'relawan') {
-            $data = $query->where('donatur.pegawai_id', $pegawai_id)->get();
+            $query->where('donatur.pegawai_id', $pegawai_id);
         } else {
-            $data = $query->leftJoin('korel as k', function ($join) {
+            $query->leftJoin('korel as k', function ($join) {
                 $join->on('donatur.pegawai_id', '=', 'k.bawahan_id');
                 $join->orOn('donatur.pegawai_id', '=', 'k.kepala_id', 'or');
             })
-                ->where('k.kepala_id', $pegawai_id)->get();
+            ->where('k.kepala_id', $pegawai_id);
         }
 
-        return Datatables::of($data)
+        return Datatables::of($query)
             ->addIndexColumn()
             ->addColumn('action', function ($donatur) {
                 return view('donatur.action', compact('donatur'));
             })
             ->editColumn('pekerjaan', function ($donatur) {
-                if (explode('-', $donatur->pekerjaan)[0] == 'lainnya') {
+                if ($donatur->pekerjaan && explode('-', $donatur->pekerjaan)[0] == 'lainnya') {
                     return explode('-', $donatur->pekerjaan)[1];
                 } else {
                     return $donatur->pekerjaan;
                 }
             })
+            ->orderColumn('DT_RowIndex', '-donatur.id')
             ->rawColumns(['action'])
             ->make(true);
     }
+
+
 
     /**
      * Show the form for creating a new resource.
