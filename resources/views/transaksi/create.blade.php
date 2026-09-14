@@ -71,9 +71,17 @@
                             <label class="fs-6 fw-bold mb-2">Nama Donatur</label>
                             <select class="form-control select2" name="donatur_id" id="donatur_select">
                                 <option value="">Pilih Donatur ...</option>
-                                @foreach($donatur as $item)
-                                    <option value="{{ $item->id }}" {{ $item->id == @$transaksi->donatur_id ? 'selected' : '' }}>{{ $item->nama }}</option>
-                                @endforeach
+                                @if($role == 'relawan')
+                                    @foreach($donatur as $item)
+                                        <option value="{{ $item->id }}" {{ $item->id == @$transaksi->donatur_id ? 'selected' : '' }}>{{ $item->nama }}</option>
+                                    @endforeach
+                                @elseif(@$transaksi)
+                                    @foreach($donatur as $item)
+                                        <option value="{{ $item->id }}" {{ $item->id == @$transaksi->donatur_id ? 'selected' : '' }}>{{ $item->nama }}</option>
+                                    @endforeach
+                                @else
+                                    <option value="" disabled>Pilih Relawan dahulu untuk menampilkan donatur...</option>
+                                @endif
                             </select>
                         </div>
                         <div class="donatur_baru">
@@ -225,6 +233,27 @@
         }
     }
 
+    // Dynamic donatur dropdown based on selected relawan
+    let donaturBaseUrl = "{{ route('transaksi.get_donatur', ['pegawai_id' => 'PLACEHOLDER']) }}";
+
+    let loadDonatur = (pegawaiId) => {
+        if(!pegawaiId) return;
+        let url = donaturBaseUrl.replace('PLACEHOLDER', pegawaiId);
+        $.getJSON(url, function(data) {
+            let $select = $("#donatur_select");
+            $select.empty().append('<option value="">Pilih Donatur ...</option>');
+            $.each(data, function(i, item) {
+                $select.append('<option value="' + item.id + '">' + item.nama + '</option>');
+            });
+            $select.trigger('change');
+        });
+    };
+
+    $("#relawan_select").on('change', function() {
+        let pegawaiId = $(this).val();
+        loadDonatur(pegawaiId);
+    });
+
     let transaksi = "{{ @$transaksi }}";
     if(transaksi){
         setDonatur('lama');
@@ -232,6 +261,15 @@
     }else{
         setDonatur('baru');
         setUpload('cash');
+        // Auto-load donatur for default selected relawan (non-relawan role only)
+        @if($role != 'relawan')
+        $(document).ready(function() {
+            let defaultPegawaiId = $("#relawan_select").val();
+            if(defaultPegawaiId) {
+                loadDonatur(defaultPegawaiId);
+            }
+        });
+        @endif
     }
 </script>
 @endpush
