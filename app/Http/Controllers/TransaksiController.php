@@ -11,6 +11,7 @@ use App\Models\Transaksi;
 use App\Models\TransaksiDetail;
 use App\Models\User;
 use App\Services\GoogleSheetService;
+use App\Jobs\SyncTransaksiToSheet;
 use Auth;
 use DataTables;
 use DB;
@@ -177,11 +178,10 @@ class TransaksiController extends Controller
             $message['image.required'] = 'Bukti transfer belum dipilih';
         }
 
-        $googleService = new GoogleSheetService;
-
         request()->validate($validation, $message);
 
-        DB::transaction(function () use ($request, $checkDonatur, $jenis_transaksi, $googleService) {
+        // Save to DB first (transaction), then sync to Google Sheet separately
+        $syncData = DB::transaction(function () use ($request, $checkDonatur, $jenis_transaksi) {
             if (strtolower(Auth::user()->roles[0]->name) == 'admin') {
                 $pegawai_id = $request->input('pegawai_id');
             } else {
@@ -241,19 +241,23 @@ class TransaksiController extends Controller
                 }
                 $n++;
             }
-            $googleService->storeTransaksi($transaksi->id, $donasi);
+
+            // Return data needed for sync (outside transaction)
+            return ['transaksi_id' => $transaksi->id, 'donasi' => $donasi];
         });
+
+        // Sync to Google Sheet AFTER DB commit (non-blocking, error won't rollback DB)
+        try {
+            $googleService = new GoogleSheetService;
+            $googleService->storeTransaksi($syncData['transaksi_id'], $syncData['donasi']);
+        } catch (\Exception $e) {
+            SyncTransaksiToSheet::dispatch($syncData['transaksi_id'], $syncData['donasi']); \Log::warning('Google Sheet sync queued for retry: transaksi #' . $syncData['transaksi_id'] . ': ' . $e->getMessage());
+        }
 
         return redirect()->route('transaksi.index')
             ->with('success', ucfirst('Tambah ' . $this->title . ' Berhasil'));
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function show($id)
     {
         $transaksi = transaksi::leftJoin('file as f', 'transaksi.file_id', '=', 'f.id')

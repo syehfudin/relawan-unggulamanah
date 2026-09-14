@@ -8,9 +8,29 @@ use App\Models\SetoranDetail;
 use App\Models\Transaksi;
 use DB;
 use Sheets;
+use Log;
 
 class GoogleSheetService
 {
+    /**
+     * Safely append data to Google Sheet with error logging.
+     * Re-throws exception so caller can handle (controller wraps in try/catch).
+     */
+    private function safeAppend(string $sheetName, array $data): void
+    {
+        try {
+            Sheets::spreadsheet(config('google.spread_sheet_id'))->sheet($sheetName)->append($data);
+        } catch (\Exception $e) {
+            Log::error('GoogleSheet append failed', [
+                'sheet' => $sheetName,
+                'rows' => count($data),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
+    }
+
     public function storeSheet()
     {
         $transaksi = Transaksi::leftJoin('transaksi_detail as td', 'transaksi.id', '=', 'td.transaksi_id')
@@ -79,7 +99,7 @@ class GoogleSheetService
             $data[] = $list;
         }
 
-        Sheets::spreadsheet(config('google.spread_sheet_id'))->sheet('report')->append($data);
+        $this->safeAppend('report', $data);
     }
 
     public function storeTransaksi($idTransaksi, $donasi)
@@ -116,9 +136,8 @@ class GoogleSheetService
         } else {
             $list[] = 'Transfer ke Rek ULAMA';
         }
-        // dd($list);
         $data[] = $list;
-        Sheets::spreadsheet(config('google.spread_sheet_id'))->sheet('report')->append($data);
+        $this->safeAppend('report', $data);
     }
 
     public function firstStore()
@@ -172,7 +191,7 @@ class GoogleSheetService
                 $data[] = $detailSetor;
             }
         }
-        Sheets::spreadsheet(config('google.spread_sheet_id'))->sheet('setoran')->append($data);
+        $this->safeAppend('setoran', $data);
     }
 
     public function storeSetoran($setor_id)
@@ -227,6 +246,6 @@ class GoogleSheetService
             $detailSetor[] = $item->total_donasi;
             $data[] = $detailSetor;
         }
-        Sheets::spreadsheet(config('google.spread_sheet_id'))->sheet('setoran')->append($data);
+        $this->safeAppend('setoran', $data);
     }
 }

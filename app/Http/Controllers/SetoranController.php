@@ -10,6 +10,7 @@ use App\Models\SetoranDetail;
 use App\Models\Transaksi;
 use App\Models\User;
 use App\Services\GoogleSheetService;
+use App\Jobs\SyncSetoranToSheet;
 use Auth;
 use DataTables;
 use DB;
@@ -159,8 +160,8 @@ class SetoranController extends Controller
             'file.required' => 'Bukti transfer belum dipilih',
         ]);
 
-        DB::transaction(function () use ($request) {
-            $googleService = new GoogleSheetService;
+        // Save to DB first (transaction), then sync to Google Sheet separately
+        $setoranId = DB::transaction(function () use ($request) {
             if (strtolower(Auth::user()->roles[0]->name) == 'admin') {
                 $pegawai_id = $request->input('pegawai_id');
             } else {
@@ -189,19 +190,22 @@ class SetoranController extends Controller
                 $sd['transaksi_id'] = $id;
                 SetoranDetail::create($sd);
             }
-            $googleService->storeSetoran($setoran->id);
+
+            return $setoran->id;
         });
+
+        // Sync to Google Sheet AFTER DB commit (non-blocking, error won't rollback DB)
+        try {
+            $googleService = new GoogleSheetService;
+            $googleService->storeSetoran($setoranId);
+        } catch (\Exception $e) {
+            SyncSetoranToSheet::dispatch($setoranId); \Log::warning('Google Sheet sync queued for retry: setoran #' . $setoranId . ': ' . $e->getMessage());
+        }
 
         return redirect()->route('setoran.index')
             ->with('success', ucfirst('Tambah ' . $this->title . ' Berhasil'));
     }
 
-    /**
-     * Display the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function show($id)
     {
         $setoran = setoran::leftJoin('file as f', 'setoran.file_id', '=', 'f.id')
