@@ -58,7 +58,7 @@ class SetoranController extends Controller
                 'f.path',
                 'f.nama as nama_file',
                 DB::raw('concat(f.path, f.nama) as image_url'),
-                DB::raw('sum(td.nominal_donasi) as total_donasi'),
+                DB::raw('COALESCE(sum(td.nominal_donasi), 0) as total_donasi'),
             ])
             ->groupBy([
                 'p.nama',
@@ -71,25 +71,27 @@ class SetoranController extends Controller
             ->orderBy('setoran.created_at', 'desc');
 
         if (in_array($role, ['admin', 'manager'])) {
-            $data = $query->get();
+            // No filter - show all
         } elseif ($role == 'relawan') {
-            $data = $query->where('setoran.pegawai_id', $pegawai_id)->get();
+            $query->where('setoran.pegawai_id', $pegawai_id);
         } else {
-            $data = $query->leftJoin('korel as k', function ($join) {
+            $query->leftJoin('korel as k', function ($join) {
                 $join->on('setoran.pegawai_id', '=', 'k.bawahan_id');
                 $join->orOn('setoran.pegawai_id', '=', 'k.kepala_id', 'or');
             })
-                ->where('k.kepala_id', $pegawai_id)->get();
+            ->where('k.kepala_id', $pegawai_id);
         }
 
-        return Datatables::of($data)
+        return Datatables::of($query)
             ->addIndexColumn()
             ->addColumn('action', function ($setoran) {
                 return view('setoran.action', compact('setoran'));
             })
+            ->orderColumn('DT_RowIndex', '-setoran.id')
             ->rawColumns(['action'])
             ->make(true);
     }
+
 
     /**
      * Show the form for creating a new resource.
