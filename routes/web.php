@@ -110,6 +110,7 @@ Route::group(['middleware' => ['auth']], function () {
         Route::delete('/{id}', [TransaksiController::class, 'destroy'])->name('transaksi.destroy');
         Route::get('/index_data', [TransaksiController::class, 'indexData'])->name('transaksi.index_data');
         Route::get('/print/{id}', [TransaksiController::class, 'importPdf'])->name('transaksi.importPdf');
+        Route::get("/get-donatur/{pegawai_id}", [TransaksiController::class, "getDonaturByPegawai"])->name("transaksi.get_donatur");
     });
 
     Route::prefix('setoran')->group(function () {

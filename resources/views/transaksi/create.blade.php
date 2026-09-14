@@ -27,7 +27,7 @@
                             <label class="fs-6 fw-bold mb-2">
                                 <span class="required">Nama Relawan</span>
                             </label>
-                            <select class="form-control" name="pegawai_id">
+                            <select class="form-control" name="pegawai_id" id="relawan_select">
                                 @foreach($relawan as $item)
                                     @php
                                         $selected = "";
@@ -69,7 +69,7 @@
                         @endif
                         <div class="mb-3 donatur_lama">
                             <label class="fs-6 fw-bold mb-2">Nama Donatur</label>
-                            <select class="form-control select2" name="donatur_id">
+                            <select class="form-control select2" name="donatur_id" id="donatur_select">
                                 <option value="">Pilih Donatur ...</option>
                                 @foreach($donatur as $item)
                                     <option value="{{ $item->id }}" {{ $item->id == @$transaksi->donatur_id ? 'selected' : '' }}>{{ $item->nama }}</option>

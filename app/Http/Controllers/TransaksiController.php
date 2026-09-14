@@ -160,6 +160,47 @@ class TransaksiController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
+    /**
+     * AJAX: Get donatur by pegawai_id (for dynamic dropdown)
+     * Returns JSON list of donatur belonging to the selected relawan.
+     */
+    public function getDonaturByPegawai($pegawai_id)
+    {
+        $role = strtolower(Auth::user()->roles[0]->name);
+        $myPegawaiId = Auth::user()->pegawai_id;
+
+        if (in_array($role, ['admin', 'manager', 'superadmin'])) {
+            // Admin/Manager: donatur milik relawan yang dipilih
+            $donatur = Donatur::where('pegawai_id', $pegawai_id)
+                ->select('id', 'nama')
+                ->orderBy('nama', 'asc')
+                ->get();
+        } elseif ($role == 'supervisor') {
+            // Supervisor: hanya donatur dari bawahan atau dirinya sendiri
+            $isBawahan = DB::table('korel')
+                ->where('kepala_id', $myPegawaiId)
+                ->where('bawahan_id', $pegawai_id)
+                ->exists();
+
+            if ($pegawai_id == $myPegawaiId || $isBawahan) {
+                $donatur = Donatur::where('pegawai_id', $pegawai_id)
+                    ->select('id', 'nama')
+                    ->orderBy('nama', 'asc')
+                    ->get();
+            } else {
+                $donatur = collect([]);
+            }
+        } else {
+            // Relawan: hanya donatur miliknya sendiri
+            $donatur = Donatur::where('pegawai_id', $myPegawaiId)
+                ->select('id', 'nama')
+                ->orderBy('nama', 'asc')
+                ->get();
+        }
+
+        return response()->json($donatur);
+    }
+
     public function store(Request $request)
     {
         $checkDonatur = $request->input('status');
