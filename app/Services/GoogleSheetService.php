@@ -19,7 +19,7 @@ class GoogleSheetService
     private function safeAppend(string $sheetName, array $data): void
     {
         try {
-            Sheets::spreadsheet(config('google.spread_sheet_id'))->sheet($sheetName)->append($data);
+            Sheets::spreadsheet(config('google.spread_sheet_id'))->sheet($sheetName)->append($data, 'USER_ENTERED');
         } catch (\Exception $e) {
             Log::error('GoogleSheet append failed', [
                 'sheet' => $sheetName,
@@ -75,7 +75,7 @@ class GoogleSheetService
 
         foreach ($transaksi as $item) {
             $list = [];
-            $list[] = date('m-d-Y', strtotime($item->tanggal));
+            $list[] = date('d-m-Y', strtotime($item->tanggal));
             $list[] = $item->relawan;
             $list[] = $item->donatur;
             $list[] = isset($item->alamat) ? $item->alamat : '';
@@ -120,7 +120,7 @@ class GoogleSheetService
 
         $program = Program::orderBy('id', 'asc')->get();
 
-        $list[] = date('m-d-Y', strtotime($transaksi->tanggal));
+        $list[] = date('d-m-Y', strtotime($transaksi->tanggal));
         $list[] = $transaksi->relawan;
         $list[] = $transaksi->donatur;
         $list[] = isset($transaksi->alamat) ? $transaksi->alamat : '';
@@ -157,7 +157,7 @@ class GoogleSheetService
         foreach ($setor as $item) {
             $header = ['Tanggal', 'Nama Relawan', 'Total Setoran', 'Bukti Setoran'];
             $dataSetor = [];
-            $dataSetor[] = date('m-d-Y', strtotime($item->created_at));
+            $dataSetor[] = date('d-m-Y', strtotime($item->created_at));
             $dataSetor[] = $item->relawan;
             $dataSetor[] = $item->total_setoran;
             $dataSetor[] = asset($item->path.$item->nama_file);
@@ -182,7 +182,7 @@ class GoogleSheetService
                 ])->get();
             foreach ($detail as $row) {
                 $detailSetor = [];
-                $detailSetor[] = date('m-d-Y', strtotime($row->tanggal));
+                $detailSetor[] = date('d-m-Y', strtotime($row->tanggal));
                 $detailSetor[] = $item->relawan;
                 $detailSetor[] = $row->donatur;
                 $detailSetor[] = $row->alamat;
@@ -231,14 +231,14 @@ class GoogleSheetService
         $header[] = 'Bukti Setoran';
         $data[] = $header;
         $dataSetor = [];
-        $dataSetor[] = date('m-d-Y');
+        $dataSetor[] = date('d-m-Y');
         $dataSetor[] = $setor->relawan;
         $dataSetor[] = $setor->total_setoran;
         $dataSetor[] = asset($setor->path.$setor->nama_file);
         $data[] = $dataSetor;
         foreach ($detail as $item) {
             $detailSetor = [];
-            $detailSetor[] = date('m-d-Y', strtotime($item->tanggal));
+            $detailSetor[] = date('d-m-Y', strtotime($item->tanggal));
             $detailSetor[] = $setor->relawan;
             $detailSetor[] = $item->donatur;
             $detailSetor[] = isset($item->alamat) ? $item->alamat : '';
