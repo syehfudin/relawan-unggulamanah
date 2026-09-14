@@ -141,7 +141,7 @@ class SetoranController extends Controller
                 'p.id',
                 'p.nama',
             ])
-            ->get();
+            ->orderBy("p.nama", "asc")->get();
 
         return view('setoran.create', compact('title', 'action', 'redirectUrl', 'relawan', 'transaksi'));
     }
@@ -253,7 +253,7 @@ class SetoranController extends Controller
                 'p.id',
                 'p.nama',
             ])
-            ->get();
+            ->orderBy("p.nama", "asc")->get();
 
         return view('setoran.show', compact('title', 'action', 'redirectUrl', 'setoran', 'setoran_detail', 'show', 'relawan', 'donatur'));
     }
@@ -301,7 +301,7 @@ class SetoranController extends Controller
                 'p.id',
                 'p.nama',
             ])
-            ->get();
+            ->orderBy("p.nama", "asc")->get();
 
         return view('setoran.create', compact('title', 'action', 'redirectUrl', 'setoran', 'transaksi', 'relawan'));
     }

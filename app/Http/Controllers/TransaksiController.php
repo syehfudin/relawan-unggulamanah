@@ -134,7 +134,7 @@ class TransaksiController extends Controller
                     'p.nama',
                     'p.default',
                 ])
-                ->get();
+                ->orderBy("p.nama", "asc")->get();
         } else {
             $donatur = Donatur::get();
             $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
@@ -146,7 +146,7 @@ class TransaksiController extends Controller
                     'p.nama',
                     'p.default',
                 ])
-                ->get();
+                ->orderBy("p.nama", "asc")->get();
         }
 
         $pekerjaan = Pekerjaan::get();
@@ -332,7 +332,7 @@ class TransaksiController extends Controller
                 'p.id',
                 'p.nama',
             ])
-            ->get();
+            ->orderBy("p.nama", "asc")->get();
 
         return view('transaksi.show', compact('title', 'action', 'redirectUrl', 'transaksi', 'transaksi_detail', 'show', 'relawan', 'donatur'));
     }
@@ -381,7 +381,7 @@ class TransaksiController extends Controller
                 'p.id',
                 'p.nama',
             ])
-            ->get();
+            ->orderBy("p.nama", "asc")->get();
 
         return view('transaksi.edit', compact('title', 'action', 'redirectUrl', 'transaksi', 'relawan', 'donatur', 'pekerjaan', 'program'));
     }
