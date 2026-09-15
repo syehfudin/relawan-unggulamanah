@@ -65,6 +65,42 @@
         <a class="btn btn-success" href="{{ route('setoran.create') }}"> Tambah setoran</a>
         @endcan
     </div>
+    <!-- Filter Panel -->
+    <div class="card card-primary card-outline">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-filter"></i> Filter Data</h3>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-end">
+                <div class="col-12 col-md-3">
+                    <label class="fs-6 fw-bold mb-1">Tanggal Mulai</label>
+                    <input type="text" class="form-control" id="filter_date_from" placeholder="dd-mm-yyyy" autocomplete="off">
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="fs-6 fw-bold mb-1">Tanggal Sampai</label>
+                    <input type="text" class="form-control" id="filter_date_to" placeholder="dd-mm-yyyy" autocomplete="off">
+                </div>
+                @if(strtolower(Auth::user()->roles[0]->name) != 'relawan')
+                <div class="col-12 col-md-3">
+                    <label class="fs-6 fw-bold mb-1">Nama Penyetor</label>
+                    <select class="form-control" id="filter_pegawai">
+                        <option value="">Semua Penyetor</option>
+                        @foreach($relawan as $item)
+                            <option value="{{ $item->id }}">{{ $item->nama }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                @else
+                <input type="hidden" id="filter_pegawai" value="{{ Auth::user()->pegawai_id }}">
+                @endif
+                <div class="col-12 col-md-3">
+                    <button type="button" class="btn btn-primary btn-block" id="btn_apply_filter">
+                        <i class="fas fa-search"></i> Terapkan Filter
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="row">
         <div class="col-12 col-lg-12">
             <div class="card">
@@ -144,7 +180,30 @@
         "processing": true,
         "serverSide": true,
         "searching": true,
-        "ajax": dataUrl,
+        "language": {
+            "search": "Cari Donatur:",
+            "searchPlaceholder": "Ketik nama donatur...",
+            "processing": "Memuat data...",
+            "emptyTable": "Tidak ada data setoran",
+            "zeroRecords": "Tidak ada setoran yang cocok dengan pencarian",
+            "info": "Menampilkan _START_ - _END_ dari _TOTAL_ setoran",
+            "infoEmpty": "Menampilkan 0 setoran",
+            "infoFiltered": "(difilter dari _MAX_ total setoran)",
+            "paginate": {
+                "first": "Awal",
+                "last": "Akhir",
+                "next": "Berikutnya",
+                "previous": "Sebelumnya"
+            }
+        },
+        "ajax": {
+            "url": dataUrl,
+            "data": function (d) {
+                d.date_from = $("#filter_date_from").val();
+                d.date_to = $("#filter_date_to").val();
+                d.pegawai_id = $("#filter_pegawai").val() || "";
+            }
+        },
         columns: [
             { data: "DT_RowIndex", name: "DT_RowIndex" },
             { data: "tanggal_setoran", name: "tanggal_setoran" },
@@ -212,5 +271,21 @@
     //     }
     // });
     table = dt.$;
+
+    // Datepicker for filters
+    $("#filter_date_from").datepicker({ dateFormat: 'dd-mm-yy' });
+    $("#filter_date_to").datepicker({ dateFormat: 'dd-mm-yy' });
+
+    // Apply filter button
+    $("#btn_apply_filter").on('click', function() {
+        dt.ajax.reload();
+    });
+
+    // Enter key on date fields
+    $("#filter_date_from, #filter_date_to").on('keypress', function(e) {
+        if (e.which === 13) {
+            dt.ajax.reload();
+        }
+    });
 </script>
 @endpush

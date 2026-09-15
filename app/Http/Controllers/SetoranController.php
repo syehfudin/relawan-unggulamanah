@@ -34,7 +34,36 @@ class SetoranController extends Controller
         // $googleService->firstStore();
         $title = $this->title;
 
-        return view('setoran.index', compact('title'));
+        // Load relawan list for filter dropdown
+        $role = strtolower(Auth::user()->roles[0]->name);
+        $myPegawaiId = Auth::user()->pegawai_id;
+        if ($role == 'relawan') {
+            $relawan = Pegawai::where('id', $myPegawaiId)->get();
+        } elseif ($role == 'supervisor') {
+            $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
+                ->join('model_has_roles as mhr', 'users.id', '=', 'mhr.model_id')
+                ->join('roles as r', 'r.id', '=', 'mhr.role_id')
+                ->join('korel as k', function ($join) {
+                    $join->on('p.id', '=', 'k.bawahan_id');
+                    $join->orOn('p.id', '=', 'k.kepala_id', 'or');
+                })
+                ->where('k.kepala_id', $myPegawaiId)
+                ->where('r.name', 'Relawan')
+                ->select(['p.id', 'p.nama'])
+                ->orderBy('p.nama', 'asc')
+                ->distinct()
+                ->get();
+        } else {
+            $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
+                ->join('model_has_roles as mhr', 'users.id', '=', 'mhr.model_id')
+                ->join('roles as r', 'r.id', '=', 'mhr.role_id')
+                ->where('r.name', 'Relawan')
+                ->select(['p.id', 'p.nama'])
+                ->orderBy('p.nama', 'asc')
+                ->get();
+        }
+
+        return view('setoran.index', compact('title', 'relawan'));
     }
 
     /**
@@ -42,13 +71,14 @@ class SetoranController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function indexData()
+    public function indexData(Request $request)
     {
         $role = strtolower(Auth::user()->roles[0]->name);
         $pegawai_id = Auth::user()->pegawai_id;
         $query = setoran::leftJoin('setoran_detail as sd', 'setoran.id', '=', 'sd.setoran_id')
             ->leftJoin('transaksi as t', 'sd.transaksi_id', '=', 't.id')
             ->leftJoin('transaksi_detail as td', 't.id', '=', 'td.transaksi_id')
+            ->leftJoin('donatur as d', 't.donatur_id', '=', 'd.id')
             ->leftJoin('pegawai as p', 'setoran.pegawai_id', '=', 'p.id')
             ->leftJoin('file as f', 'setoran.file_id', 'f.id')
             ->select([
@@ -70,6 +100,7 @@ class SetoranController extends Controller
             ])
             ->orderBy('setoran.created_at', 'desc');
 
+        // Role-based access filter
         if (in_array($role, ['admin', 'manager'])) {
             // No filter - show all
         } elseif ($role == 'relawan') {
@@ -82,7 +113,40 @@ class SetoranController extends Controller
             ->where('k.kepala_id', $pegawai_id);
         }
 
+        // Date filter: single date or range (input format dd-mm-yyyy)
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+
+        if ($dateFrom) {
+            $query->where('setoran.created_at', '>=', date('Y-m-d 00:00:00', strtotime($dateFrom)));
+        }
+        if ($dateTo) {
+            $query->where('setoran.created_at', '<=', date('Y-m-d 23:59:59', strtotime($dateTo)));
+        }
+
+        // Relawan (penyetor) filter
+        $filterPegawai = $request->input('pegawai_id');
+        if ($filterPegawai && !in_array($role, ['relawan'])) {
+            if ($role == 'supervisor') {
+                $isBawahan = DB::table('korel')
+                    ->where('kepala_id', $pegawai_id)
+                    ->where('bawahan_id', $filterPegawai)
+                    ->exists();
+                if ($filterPegawai == $pegawai_id || $isBawahan) {
+                    $query->where('setoran.pegawai_id', $filterPegawai);
+                }
+            } else {
+                $query->where('setoran.pegawai_id', $filterPegawai);
+            }
+        }
+
         return Datatables::of($query)
+            ->filter(function ($query) use ($request) {
+                // Global search: donatur name only (consistent with transaksi menu)
+                if ($request->has('search') && $search = $request->input('search.value')) {
+                    $query->where('d.nama', 'ILIKE', "%{$search}%");
+                }
+            })
             ->addIndexColumn()
             ->addColumn('action', function ($setoran) {
                 return view('setoran.action', compact('setoran'));
@@ -91,7 +155,6 @@ class SetoranController extends Controller
             ->rawColumns(['action'])
             ->make(true);
     }
-
 
     /**
      * Show the form for creating a new resource.
