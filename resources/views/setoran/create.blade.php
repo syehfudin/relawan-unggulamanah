@@ -80,13 +80,6 @@ $(document).ready(function(){
         total_setor();
     });
 
-    $("#add_transaksi").on('click', function() {
-        let content = document.getElementById("transaksi");
-        let element = stringToHTML(template());
-        content.append(element);
-
-    });
-
     $("#transaksi").on('click', ".delete", function(){
         var id = this;
         $(this).parents('.list_transaksi').remove();
@@ -119,6 +112,9 @@ $(document).ready(function(){
         return Number(curr.replace(/[^0-9.-]+/g,""));
     }
 
+    // Global options store for transaksi dropdown (loaded via AJAX per relawan)
+    let transaksiOptions = [];
+
     // Load unsetored transaksi for selected relawan via AJAX
     let transaksiUrl = "{{ route('setoran.get_transaksi', ['pegawai_id' => 'PLACEHOLDER']) }}";
 
@@ -126,25 +122,49 @@ $(document).ready(function(){
         if(!pegawaiId) return;
         let url = transaksiUrl.replace('PLACEHOLDER', pegawaiId);
         $.getJSON(url, function(data) {
-            let $select = $(".transaksi_id").first();
-            $select.empty().append('<option value="" nominal="0">Pilih Transaksi ...</option>');
-            $.each(data, function(i, item) {
-                $select.append('<option value="' + item.id + '" nominal="' + item.total_donasi + '">' + item.tanggal + ' - ' + item.nama_donatur + '</option>');
-            });
+            transaksiOptions = data;
+            // Populate any existing selects
+            populateAllSelects();
         });
     };
 
-    // When relawan dropdown changes: reload transaksi options
+    // Populate a single select element with current options
+    let populateSelect = function (selectEl) {
+        let $select = $(selectEl);
+        $select.empty().append('<option value="" nominal="0">Pilih Transaksi ...</option>');
+        $.each(transaksiOptions, function(i, item) {
+            $select.append('<option value="' + item.id + '" nominal="' + item.total_donasi + '">' + item.tanggal + ' - ' + item.nama_donatur + '</option>');
+        });
+    };
+
+    let populateAllSelects = function () {
+        $(".transaksi_id").each(function() {
+            populateSelect(this);
+        });
+    };
+
+    $("#add_transaksi").on('click', function() {
+        if(transaksiOptions.length === 0) {
+            alert('Pilih Relawan dahulu atau relawan ini tidak memiliki transaksi yang belum disetor.');
+            return;
+        }
+        let content = document.getElementById("transaksi");
+        let element = stringToHTML(template());
+        content.append(element);
+        // Populate the new row's select with loaded options
+        populateSelect(element.querySelector('.transaksi_id'));
+    });
+
+    // When relawan dropdown changes: clear rows, reload options
     $("#pegawai_id").on('change', function() {
         let pegawaiId = $(this).val();
-        // Clear all existing rows first
         $(".list_transaksi").remove();
         $("#ttl_setor").val('');
         $("#total_setor").val('');
         loadTransaksi(pegawaiId);
     });
 
-    // On page load (admin): load transaksi for default selected relawan
+    // On page load: load transaksi for default selected relawan
     let defaultPegawai = $("#pegawai_id").val();
     if(defaultPegawai) {
         loadTransaksi(defaultPegawai);
