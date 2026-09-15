@@ -165,6 +165,7 @@
             {
                 targets: [1],
                 render: function (data, type, row) {
+                    if (!data) return '';
                     var datePart = data.match(/\d+/g),
                         year = datePart[0],
                         month = datePart[1],
