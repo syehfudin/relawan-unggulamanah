@@ -8,6 +8,7 @@ use DataTables;
 use App\Models\Reha;
 use App\Models\User;
 use Auth;
+use DB;
 use Illuminate\Http\Request;
 
 class RehaController extends Controller
@@ -85,7 +86,39 @@ class RehaController extends Controller
                 ->get();
         }
 
-        return view('reha.create', compact('title', 'action', 'redirectUrl', 'relawan'));
+        // Load donatur list per relawan (for realisasi donatur lama checklist)
+        $donatur_by_pegawai = [];
+        $donaturAll = Donatur::select(['id', 'nama', 'pegawai_id'])
+            ->orderBy('nama', 'asc')
+            ->get();
+        foreach ($donaturAll as $dn) {
+            $donatur_by_pegawai[$dn->pegawai_id][] = [
+                'id' => $dn->id,
+                'nama' => $dn->nama,
+            ];
+        }
+
+        // Relawan with donatur only (for dropdown, relawan role sees self)
+        if ($role != 'relawan') {
+            $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
+                ->join('model_has_roles as mhr', 'users.id', '=', 'mhr.model_id')
+                ->join('roles as r', 'r.id', '=', 'mhr.role_id')
+                ->where('r.name', 'Relawan')
+                ->whereExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('donatur')
+                        ->whereColumn('donatur.pegawai_id', 'p.id');
+                })
+                ->select([
+                    'p.id',
+                    'p.nama',
+                ])
+                ->orderBy('p.nama', 'asc')
+                ->distinct()
+                ->get();
+        }
+
+        return view('reha.create', compact('title', 'action', 'redirectUrl', 'relawan', 'donatur_by_pegawai', 'role'));
     }
 
     public function store(Request $request)
@@ -120,8 +153,19 @@ class RehaController extends Controller
         $input['pegawai_id'] = $pegawai_id;
         $input['tanggal'] = date('Y-m-d', strtotime($request->input('tanggal')));
 
-        // Ubah array jenis_akad menjadi JSON sebelum disimpan
-        $input['jenis_akad'] = json_encode($input['jenis_akad']);
+        // Checklist donatur lama yang dikunjungi (array of donatur ids)
+        $input['realisasi_donatur_lama_ids'] = json_encode($request->input('realisasi_donatur_lama_ids', []) ?: []);
+
+        // Nominal deal hari ini
+        $input['deal_donatur_lama_nominal'] = (int) str_replace(',', '', $request->input('deal_donatur_lama_nominal', 0) ?: 0);
+        $input['deal_donatur_baru_nominal'] = (int) str_replace(',', '', $request->input('deal_donatur_baru_nominal', 0) ?: 0);
+
+        // Ubah array jenis_akad menjadi JSON sebelum disimpan (optional now)
+        if (isset($input['jenis_akad']) && is_array($input['jenis_akad'])) {
+            $input['jenis_akad'] = json_encode($input['jenis_akad']);
+        } else {
+            unset($input['jenis_akad']);
+        }
 
         Reha::create($input);
 
