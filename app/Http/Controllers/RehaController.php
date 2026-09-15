@@ -36,11 +36,12 @@ class RehaController extends Controller
         return view('reha.index', compact('title'));
     }
 
-    public function indexData()
+    public function indexData(Request $request)
     {
-        // $data = Reha::get();
+        $role = strtolower(Auth::user()->roles[0]->name);
+        $pegawai_id = Auth::user()->pegawai_id;
+
         $query = Reha::leftJoin('pegawai as p', 'report_harian.pegawai_id', '=', 'p.id')
-            ->from('report_harian')
             ->select([
                 'report_harian.id',
                 'report_harian.tanggal',
@@ -53,17 +54,89 @@ class RehaController extends Controller
                 'report_harian.fu_donatur_baru',
                 'report_harian.deal_donatur_lama',
                 'report_harian.deal_donatur_baru',
-                'report_harian.jenis_akad',
+                'report_harian.deal_donatur_lama_nominal',
+                'report_harian.deal_donatur_baru_nominal',
+                'report_harian.deal_donatur_lama_programs',
+                'report_harian.deal_donatur_baru_programs',
             ]);
 
-        $data = $query->get();
-        return DataTables::of($data)
+        // Role-based access
+        if ($role == 'relawan') {
+            $query->where('report_harian.pegawai_id', $pegawai_id);
+        } elseif ($role == 'supervisor') {
+            $query->leftJoin('korel as k', function ($join) use ($pegawai_id) {
+                $join->on('report_harian.pegawai_id', '=', 'k.bawahan_id');
+                $join->orOn('report_harian.pegawai_id', '=', 'k.kepala_id', 'or');
+            })
+            ->where('k.kepala_id', $pegawai_id);
+        }
+
+        // Date filter
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+        if ($dateFrom) {
+            $query->where('report_harian.tanggal', '>=', date('Y-m-d', strtotime($dateFrom)));
+        }
+        if ($dateTo) {
+            $query->where('report_harian.tanggal', '<=', date('Y-m-d', strtotime($dateTo)));
+        }
+
+        return Datatables::of($query)
+            ->filter(function ($query) use ($request) {
+                if ($request->has('search') && $search = $request->input('search.value')) {
+                    $query->where('p.nama', 'ILIKE', "%{$search}%");
+                }
+            })
             ->addIndexColumn()
+            ->orderColumn('DT_RowIndex', '-report_harian.id')
+            ->addColumn('realisasi_summary', function ($reha) {
+                return ($reha->realisasi_donatur_lama ?? 0) . ' / ' . ($reha->realisasi_donatur_baru ?? 0);
+            })
+            ->addColumn('donatur_baru_summary', function ($reha) {
+                return 'Kunjungan: ' . ($reha->realisasi_donatur_baru ?? 0) .
+                    '<br>Deal: ' . ($reha->deal_donatur_baru ?? 0) .
+                    '<br>Rp ' . number_format($reha->deal_donatur_baru_nominal ?? 0, 0, ',', '.');
+            })
+            ->addColumn('donatur_lama_summary', function ($reha) {
+                return 'Kunjungan: ' . ($reha->realisasi_donatur_lama ?? 0) .
+                    '<br>Deal: ' . ($reha->deal_donatur_lama ?? 0) .
+                    '<br>Rp ' . number_format($reha->deal_donatur_lama_nominal ?? 0, 0, ',', '.');
+            })
+            ->addColumn('deal_summary', function ($reha) {
+                $dealLama = is_array($reha->deal_donatur_lama_programs) ? $reha->deal_donatur_lama_programs : [];
+                $dealBaru = is_array($reha->deal_donatur_baru_programs) ? $reha->deal_donatur_baru_programs : [];
+
+                if (empty($dealLama) && empty($dealBaru)) {
+                    return '<span class="text-muted">-</span>';
+                }
+
+                $programs = DB::table('program')->orderBy('id', 'asc')->get();
+                $nominalMap = [];
+                foreach ($programs as $p) {
+                    $nom = 0;
+                    foreach ($dealLama as $row) {
+                        if (($row['program_id'] ?? null) == $p->id) $nom += $row['nominal'];
+                    }
+                    foreach ($dealBaru as $row) {
+                        if (($row['program_id'] ?? null) == $p->id) $nom += $row['nominal'];
+                    }
+                    if ($nom > 0) {
+                        $nominalMap[] = e($p->nama) . ': Rp ' . number_format($nom, 0, ',', '.');
+                    }
+                }
+                return $nominalMap ? implode('<br>', $nominalMap) : '<span class="text-muted">-</span>';
+            })
             ->addColumn('action', function ($reha) {
                 return view('reha.action', compact('reha'));
             })
-            ->rawColumns(['action'])
+            ->rawColumns(['action', 'donatur_baru_summary', 'donatur_lama_summary', 'deal_summary'])
             ->make(true);
+    }
+
+    // Helper: convert Y-m-d to dd-mm-yyyy (client-side equivalent)
+    private function dateToDdMmYy($date)
+    {
+        return date('d-m-Y', strtotime($date));
     }
 
     public function create()
@@ -214,34 +287,19 @@ class RehaController extends Controller
 
     public function show($id)
     {
-
-        $title = 'Show ' . $this->title;
-        $action = '#';
-        $show = 'disabled';
+        $title = 'Detail ' . $this->title;
         $redirectUrl = $this->redirectUrl;
+        $show = 'disabled';
 
-        $reha = Reha::get();
-        $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
-            ->join('model_has_roles as mhr', 'users.id', '=', 'mhr.model_id')
-            ->join('roles as r', 'r.id', '=', 'mhr.role_id')
-            ->where('r.name', 'Relawan')
-            ->select([
-                'p.id',
-                'p.nama',
-                'p.default',
-            ])
-            ->get();
-       
+        $reha = Reha::leftJoin('pegawai as p', 'report_harian.pegawai_id', '=', 'p.id')
+            ->select(['report_harian.*', 'p.nama as nama_relawan'])
+            ->where('report_harian.id', $id)
+            ->first();
 
-        return view('reha.show', compact('title', 'action', 'redirectUrl', 'show', 'relawan', 'reha'));
+        $programs = DB::table('program')->orderBy('id', 'asc')->get();
+
+        return view('reha.show', compact('title', 'redirectUrl', 'show', 'reha', 'programs'));
     }
-
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function edit($id)
     {
         $reha = Reha::find($id);

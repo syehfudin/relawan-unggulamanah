@@ -43,8 +43,8 @@ class GoogleSheetService
         $programs = Program::orderBy('id', 'asc')->get();
 
         // Build program nominal map from deal programs JSONB
-        $dealLama = $reha->deal_donatur_lama_programs ?? [];
-        $dealBaru = $reha->deal_donatur_baru_programs ?? [];
+        $dealLama = is_array($reha->deal_donatur_lama_programs) ? $reha->deal_donatur_lama_programs : [];
+        $dealBaru = is_array($reha->deal_donatur_baru_programs) ? $reha->deal_donatur_baru_programs : [];
 
         $nominalByProgram = [];
         foreach ($programs as $p) {
