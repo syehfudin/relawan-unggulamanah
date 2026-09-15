@@ -215,7 +215,36 @@ class SetoranController extends Controller
             ])
             ->orderBy("p.nama", "asc")->get();
 
-        return view('setoran.create', compact('title', 'action', 'redirectUrl', 'relawan', 'transaksi'));
+        // Build per-pegawai transaksi options for JS (server-rendered, no AJAX dependency)
+        $transaksiAll = Transaksi::leftJoin('transaksi_detail as td', 'transaksi.id', '=', 'td.transaksi_id')
+            ->leftJoin('setoran_detail as sd', 'sd.transaksi_id', '=', 'transaksi.id')
+            ->leftJoin('donatur as d', 'transaksi.donatur_id', '=', 'd.id')
+            ->whereNull('sd.id')
+            ->where('transaksi.jenis_transaksi', 'cash')
+            ->whereNotNull('transaksi.donatur_id')
+            ->select([
+                'transaksi.id',
+                'transaksi.pegawai_id',
+                DB::raw("TO_CHAR(cast(transaksi.tanggal as date), 'dd-mm-yyyy') as tanggal"),
+                'd.nama as nama_donatur',
+                DB::raw('sum(td.nominal_donasi) as total_donasi'),
+            ])
+            ->groupBy(['transaksi.id', 'transaksi.pegawai_id', 'd.nama'])
+            ->orderBy('transaksi.tanggal', 'asc')
+            ->get();
+
+        $transaksi_options_js = [];
+        foreach ($transaksiAll as $trx) {
+            $transaksi_options_js[$trx->pegawai_id][] = [
+                'id' => $trx->id,
+                'tanggal' => $trx->tanggal,
+                'nama_donatur' => $trx->nama_donatur,
+                'total_donasi' => (int) $trx->total_donasi,
+            ];
+        }
+        $transaksi_options_js = json_encode($transaksi_options_js ?? []);
+
+        return view('setoran.create', compact('title', 'action', 'redirectUrl', 'relawan', 'transaksi', 'transaksi_options_js'));
     }
 
     /**

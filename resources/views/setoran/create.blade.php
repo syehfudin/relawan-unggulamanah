@@ -112,10 +112,13 @@ $(document).ready(function(){
         return Number(curr.replace(/[^0-9.-]+/g,""));
     }
 
-    // Global options store for transaksi dropdown (loaded via AJAX per relawan)
-    let transaksiOptions = [];
+    // Global options store — server-rendered per relawan (JSON), no AJAX dependency
+    let transaksiOptions = {!! isset($transaksi_options_js) ? $transaksi_options_js : '{}' !!};
+    if (!Array.isArray(transaksiOptions)) {
+        transaksiOptions = Object.values(transaksiOptions);
+    }
 
-    // Load unsetored transaksi for selected relawan via AJAX
+    // Optional AJAX reload for relawan change (fallback safe)
     let transaksiUrl = "{{ route('setoran.get_transaksi', ['pegawai_id' => 'PLACEHOLDER']) }}";
 
     let loadTransaksi = (pegawaiId) => {
@@ -123,8 +126,9 @@ $(document).ready(function(){
         let url = transaksiUrl.replace('PLACEHOLDER', pegawaiId);
         $.getJSON(url, function(data) {
             transaksiOptions = data;
-            // Populate any existing selects
             populateAllSelects();
+        }).fail(function() {
+            console.error('Failed to load transaksi for pegawai', pegawaiId);
         });
     };
 
@@ -143,15 +147,15 @@ $(document).ready(function(){
         });
     };
 
-    $("#add_transaksi").on('click', function() {
-        if(transaksiOptions.length === 0) {
+    $(document).on('click', '#add_transaksi', function() {
+        console.log('Tambah clicked, options:', transaksiOptions.length);
+        if(!Array.isArray(transaksiOptions) || transaksiOptions.length === 0) {
             alert('Pilih Relawan dahulu atau relawan ini tidak memiliki transaksi yang belum disetor.');
             return;
         }
         let content = document.getElementById("transaksi");
         let element = stringToHTML(template());
         content.append(element);
-        // Populate the new row's select with loaded options
         populateSelect(element.querySelector('.transaksi_id'));
     });
 
@@ -164,9 +168,12 @@ $(document).ready(function(){
         loadTransaksi(pegawaiId);
     });
 
-    // On page load: load transaksi for default selected relawan
+    // On page load: load transaksi for default selected relawan (from server-rendered data first, AJAX as fallback)
     let defaultPegawai = $("#pegawai_id").val();
-    if(defaultPegawai) {
+    if(defaultPegawai && transaksiOptions.length > 0) {
+        // Already have options from server render
+        console.log('Options loaded from server:', transaksiOptions.length);
+    } else if(defaultPegawai) {
         loadTransaksi(defaultPegawai);
     }
 });
