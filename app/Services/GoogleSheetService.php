@@ -6,6 +6,8 @@ use App\Models\Program;
 use App\Models\Setoran;
 use App\Models\SetoranDetail;
 use App\Models\Transaksi;
+use App\Models\Reha;
+use App\Models\User;
 use DB;
 use Sheets;
 use Log;
@@ -25,10 +27,63 @@ class GoogleSheetService
                 'sheet' => $sheetName,
                 'rows' => count($data),
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * Append Report Harian (Reha) to Google Sheet 'report_harian' sheet.
+     * Columns: Tanggal | Nama Relawan | Renku Lama | Renku Baru | Realisasi Lama | Realisasi Baru | FU Lama | FU Baru | Deal Lama | Deal Baru | [per-program nominals]
+     */
+    public function storeReha($rehaId)
+    {
+        $reha = Reha::findOrFail($rehaId);
+        $relawan = DB::table('pegawai')->where('id', $reha->pegawai_id)->value('nama');
+        $programs = Program::orderBy('id', 'asc')->get();
+
+        // Build program nominal map from deal programs JSONB
+        $dealLama = $reha->deal_donatur_lama_programs ?? [];
+        $dealBaru = $reha->deal_donatur_baru_programs ?? [];
+
+        $nominalByProgram = [];
+        foreach ($programs as $p) {
+            $nominalLama = 0;
+            $nominalBaru = 0;
+            foreach ($dealLama as $row) {
+                if ($row['program_id'] == $p->id) {
+                    $nominalLama += $row['nominal'];
+                }
+            }
+            foreach ($dealBaru as $row) {
+                $row['program_id'] = $row['program_id'] ?? $row['program_id'] ?? null;
+            }
+            foreach ($dealBaru as $row) {
+                if ($row['program_id'] == $p->id) {
+                    $nominalBaru += $row['nominal'];
+                }
+            }
+            $nominalByPegawai = null;
+            // One column per program: "lama_nominal | baru_nominal" combined? No - single nominal column per program (sum both)
+            $nominalByProgram[$p->id] = $nominalLama + $nominalBaru;
+        }
+
+        $row = [];
+        $row[] = date('d-m-Y', strtotime($reha->tanggal));
+        $row[] = $relawan;
+        $row[] = $reha->renku_donatur_lama ?? 0;
+        $row[] = $reha->renku_donatur_baru ?? 0;
+        $row[] = $reha->realisasi_donatur_lama ?? 0;
+        $row[] = $reha->realisasi_donatur_baru ?? 0;
+        $row[] = $reha->fu_donatur_lama ?? 0;
+        $row[] = $reha->fu_donatur_baru ?? 0;
+        $row[] = $reha->deal_donatur_lama ?? 0;
+        $row[] = $reha->deal_donatur_baru ?? 0;
+        foreach ($nominalByProgram as $nominal) {
+            $row[] = $nominal;
+        }
+
+        $this->safeAppend('report_harian', [$row]);
     }
 
     public function storeSheet()
@@ -75,7 +130,7 @@ class GoogleSheetService
 
         foreach ($transaksi as $item) {
             $list = [];
-            $list[] = date('d-m-Y', strtotime($item->tanggal));
+            $list[] = date('m-d-Y', strtotime($item->tanggal));
             $list[] = $item->relawan;
             $list[] = $item->donatur;
             $list[] = isset($item->alamat) ? $item->alamat : '';

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Donatur;
+use App\Services\GoogleSheetService;
+use App\Jobs\SyncRehaToSheet;
 use App\Models\Pegawai;
 use DataTables;
 use App\Models\Reha;
@@ -128,27 +130,11 @@ class RehaController extends Controller
     {
         request()->validate(
             [
-
+                // Semua kolom boleh 0/kosong - hanya pegawai_id yang wajib
                 'pegawai_id' => 'required',
-                'renku_donatur_lama' => 'required',
-                'renku_donatur_baru' => 'required',
-                'realisasi_donatur_lama' => 'required',
-                'realisasi_donatur_baru' => 'required',
-                'fu_donatur_lama' => 'required',
-                'deal_donatur_lama' => 'required',
-                'deal_donatur_baru' => 'required',
-                'jenis_akad' => 'required',
             ],
             [
                 'pegawai_id.required' => 'Pegawai wajib diisi',
-                'renku_donatur_lama.required' => 'Renku Donatur Lama wajib diisi',
-                'renku_donatur_baru.required' => 'Renku Donatur Baru wajib diisi',
-                'realisasi_donatur_lama.required' => 'Realisasi Donatur Lama wajib diisi',
-                'realisasi_donatur_baru.required' => 'Realisasi Donatur Baru wajib diisi',
-                'fu_donatur_lama.required' => 'FU Donatur Lama wajib diisi',
-                'deal_donatur_lama.required' => 'Deal Donatur Lama wajib diisi',
-                'deal_donatur_baru.required' => 'Deal Donatur Baru wajib diisi',
-                'jenis_akad.required' => 'Jenis Akad wajib diisi',
             ]
         );
         $pegawai_id = $request->input('pegawai_id');
@@ -156,9 +142,15 @@ class RehaController extends Controller
         $input['pegawai_id'] = $pegawai_id;
         $input['tanggal'] = date('Y-m-d', strtotime($request->input('tanggal')));
 
+        // Default 0 untuk semua kolom angka (boleh kosong)
+        $zeroFields = ['renku_donatur_lama', 'renku_donatur_baru', 'realisasi_donatur_baru', 'fu_donatur_lama', 'fu_donatur_baru', 'deal_donatur_lama', 'deal_donatur_baru'];
+        foreach ($zeroFields as $zf) {
+            $input[$zf] = (int) ($input[$zf] ?? 0);
+        }
+
         // Checklist donatur lama yang dikunjungi (array of donatur ids)
         $checklistIds = $request->input('realisasi_donatur_lama_ids', []) ?: [];
-        $input['realisasi_donatur_lama_ids'] = json_encode($checklistIds);
+        $input['realisasi_donatur_lama_ids'] = $checklistIds;
         // Realisasi donatur lama = jumlah dari checklist (auto)
         $input['realisasi_donatur_lama'] = count($checklistIds);
 
@@ -174,7 +166,7 @@ class RehaController extends Controller
                 $dealLamaTotal += $nom;
             }
         }
-        $input['deal_donatur_lama_programs'] = json_encode($dealLamaPrograms);
+        $input['deal_donatur_lama_programs'] = $dealLamaPrograms;
         $input['deal_donatur_lama_nominal'] = $dealLamaTotal;
 
         $dealBaruPrograms = [];
@@ -188,7 +180,7 @@ class RehaController extends Controller
                 $dealBaruTotal += $nom;
             }
         }
-        $input['deal_donatur_baru_programs'] = json_encode($dealBaruPrograms);
+        $input['deal_donatur_baru_programs'] = $dealBaruPrograms;
         $input['deal_donatur_baru_nominal'] = $dealBaruTotal;
 
         // Ubah array jenis_akad menjadi JSON sebelum disimpan (optional now)
@@ -198,7 +190,16 @@ class RehaController extends Controller
             unset($input['jenis_akad']);
         }
 
-        Reha::create($input);
+        $reha = Reha::create($input);
+
+        // Sync to Google Sheet AFTER DB commit (non-blocking, error won't rollback DB)
+        try {
+            $googleService = new GoogleSheetService;
+            $googleService->storeReha($reha->id);
+        } catch (\Exception $e) {
+            SyncRehaToSheet::dispatch($reha->id);
+            \Log::warning('Google Sheet sync queued for retry: reha #' . $reha->id . ': ' . $e->getMessage());
+        }
 
         return redirect()->route('reha.index')
             ->with('success', ucfirst('Tambah ' . $this->title . ' Berhasil'));
@@ -266,27 +267,11 @@ class RehaController extends Controller
     {
         request()->validate(
             [
-
+                // Semua kolom boleh 0/kosong - hanya pegawai_id yang wajib
                 'pegawai_id' => 'required',
-                'renku_donatur_lama' => 'required',
-                'renku_donatur_baru' => 'required',
-                'realisasi_donatur_lama' => 'required',
-                'realisasi_donatur_baru' => 'required',
-                'fu_donatur_lama' => 'required',
-                'deal_donatur_lama' => 'required',
-                'deal_donatur_baru' => 'required',
-                'jenis_akad' => 'required',
             ],
             [
                 'pegawai_id.required' => 'Pegawai wajib diisi',
-                'renku_donatur_lama.required' => 'Renku Donatur Lama wajib diisi',
-                'renku_donatur_baru.required' => 'Renku Donatur Baru wajib diisi',
-                'realisasi_donatur_lama.required' => 'Realisasi Donatur Lama wajib diisi',
-                'realisasi_donatur_baru.required' => 'Realisasi Donatur Baru wajib diisi',
-                'fu_donatur_lama.required' => 'FU Donatur Lama wajib diisi',
-                'deal_donatur_lama.required' => 'Deal Donatur Lama wajib diisi',
-                'deal_donatur_baru.required' => 'Deal Donatur Baru wajib diisi',
-                'jenis_akad.required' => 'Jenis Akad wajib diisi',
             ]
         );
 
