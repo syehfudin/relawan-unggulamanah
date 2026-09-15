@@ -135,6 +135,22 @@
         "processing": true,
         "serverSide": true,
         "searching": true,
+        "language": {
+            "search": "Cari Donatur:",
+            "searchPlaceholder": "Ketik nama donatur...",
+            "processing": "Memuat data...",
+            "emptyTable": "Tidak ada data transaksi",
+            "zeroRecords": "Tidak ada transaksi yang cocok dengan pencarian",
+            "info": "Menampilkan _START_ - _END_ dari _TOTAL_ transaksi",
+            "infoEmpty": "Menampilkan 0 transaksi",
+            "infoFiltered": "(difilter dari _MAX_ total transaksi)",
+            "paginate": {
+                "first": "Awal",
+                "last": "Akhir",
+                "next": "Berikutnya",
+                "previous": "Sebelumnya"
+            }
+        },
         "ajax": {
             "url": dataUrl,
             "data": function (d) {
