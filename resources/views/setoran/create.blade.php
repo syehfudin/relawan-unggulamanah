@@ -118,6 +118,37 @@ $(document).ready(function(){
     let conCurrToNum = (curr) => {
         return Number(curr.replace(/[^0-9.-]+/g,""));
     }
+
+    // Load unsetored transaksi for selected relawan via AJAX
+    let transaksiUrl = "{{ route('setoran.get_transaksi', ['pegawai_id' => 'PLACEHOLDER']) }}";
+
+    let loadTransaksi = (pegawaiId) => {
+        if(!pegawaiId) return;
+        let url = transaksiUrl.replace('PLACEHOLDER', pegawaiId);
+        $.getJSON(url, function(data) {
+            let $select = $(".transaksi_id").first();
+            $select.empty().append('<option value="" nominal="0">Pilih Transaksi ...</option>');
+            $.each(data, function(i, item) {
+                $select.append('<option value="' + item.id + '" nominal="' + item.total_donasi + '">' + item.tanggal + ' - ' + item.nama_donatur + '</option>');
+            });
+        });
+    };
+
+    // When relawan dropdown changes: reload transaksi options
+    $("#pegawai_id").on('change', function() {
+        let pegawaiId = $(this).val();
+        // Clear all existing rows first
+        $(".list_transaksi").remove();
+        $("#ttl_setor").val('');
+        $("#total_setor").val('');
+        loadTransaksi(pegawaiId);
+    });
+
+    // On page load (admin): load transaksi for default selected relawan
+    let defaultPegawai = $("#pegawai_id").val();
+    if(defaultPegawai) {
+        loadTransaksi(defaultPegawai);
+    }
 });
 </script>
 <script id="details-template_transaksi" type="text/x-handlebars-template">
@@ -128,9 +159,13 @@ $(document).ready(function(){
             </label>
             <select class="form-control transaksi_id" name="transaksi_id[]">
                 <option value="" nominal="0">Pilih Transaksi ...</option>
-                @foreach($transaksi as $item)
-                    <option value="{{ $item->id }}" nominal="{{ $item->total_donasi }}">{{ $item->tanggal .' - '. $item->nama_donatur }}</option>
-                @endforeach
+                @if(strtolower(Auth::user()->roles[0]->name) == 'relawan')
+                    @foreach($transaksi as $item)
+                        <option value="{{ $item->id }}" nominal="{{ $item->total_donasi }}">{{ $item->tanggal .' - '. $item->nama_donatur }}</option>
+                    @endforeach
+                @else
+                    <option value="" disabled>Pilih Relawan dahulu...</option>
+                @endif
             </select>
         </div>
         <div class="col-md-5">

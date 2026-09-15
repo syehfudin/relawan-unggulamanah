@@ -122,6 +122,7 @@ Route::group(['middleware' => ['auth']], function () {
         Route::post('/update/{id}', [SetoranController::class, 'update'])->name('setoran.update');
         Route::delete('/{id}', [SetoranController::class, 'destroy'])->name('setoran.destroy');
         Route::get('/index_data', [SetoranController::class, 'indexData'])->name('setoran.index_data');
+        Route::get("/get-transaksi/{pegawai_id}", [SetoranController::class, "getUnsetoredTransaksi"])->name("setoran.get_transaksi");
     });
 
     Route::prefix('korel')->group(function () {
