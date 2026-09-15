@@ -156,6 +156,7 @@
                             </div>
                         </div>
 
+                        <div class="section-title deal-section">DEAL HARI INI</div>
                         <div class="row mb-2 deal-section">
                             <div class="col-12 col-md-6">
                                 <label class="fw-bold">Donatur Lama - Jumlah Deal</label>
@@ -309,7 +310,10 @@
         // ===== Deal Program Rows (max 10 per type) =====
         const MAX_DEAL_ROWS = 10;
 
-        const PROGRAM_OPTIONS = '{!! $program->map(function ($p) { return "<option value='" . $p->id . "'>" . e($p->nama) . "</option>"; })->implode("") !!}';
+        const PROGRAMS = {!! $program->map(fn ($p) => ['id' => $p->id, 'nama' => $p->nama])->values() !!};
+        const PROGRAM_OPTIONS = PROGRAMS.map(function (p) {
+            return '<option value="' + p.id + '">' + p.nama + '</option>';
+        }).join('');
 
         let addDealRow = function (type) {
             let containerId = '#deal_' + type + '_rows';
