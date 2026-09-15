@@ -43,7 +43,15 @@
                 @else
                 <input type="hidden" id="filter_pegawai" value="{{ $myPegawaiId }}">
                 @endif
-                <div class="col-12 col-md-3">
+                <div class="col-12 col-md-2">
+                    <label class="fs-6 fw-bold mb-1">Jenis Pembayaran</label>
+                    <select class="form-control" id="filter_jenis">
+                        <option value="">Semua</option>
+                        <option value="cash">Titip di Relawan</option>
+                        <option value="transfer">Transfer ke Rek ULAMA</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-1">
                     <button type="button" class="btn btn-primary btn-block" id="btn_apply_filter">
                         <i class="fas fa-search"></i> Terapkan Filter
                     </button>
@@ -133,6 +141,7 @@
                 d.date_from = $("#filter_date_from").val();
                 d.date_to = $("#filter_date_to").val();
                 d.pegawai_id = $("#filter_pegawai").val() || "";
+                d.jenis_pembayaran = $("#filter_jenis").val() || "";
             }
         },
         columns: [

@@ -143,17 +143,17 @@ class TransaksiController extends Controller
             }
         }
 
+        // Jenis pembayaran filter (cash / transfer)
+        $filterJenis = $request->input('jenis_pembayaran');
+        if (in_array($filterJenis, ['cash', 'transfer'])) {
+            $query->where('transaksi.jenis_transaksi', $filterJenis);
+        }
+
         return Datatables::of($query)
             ->filter(function ($query) use ($request, $role) {
                 // Custom global search: prioritize donatur name
                 if ($request->has('search') && $search = $request->input('search.value')) {
-                    $query->where(function ($q) use ($search) {
-                        // Priority 1: donatur name (ILIKE, case-insensitive)
-                        $q->where('d.nama', 'ILIKE', "%{$search}%");
-                        // Also match relawan name and keterangan
-                        $q->orWhere('p.nama', 'ILIKE', "%{$search}%");
-                        $q->orWhere('transaksi.keterangan', 'ILIKE', "%{$search}%");
-                    });
+                    $query->where('d.nama', 'ILIKE', "%{$search}%");
                 }
             })
             ->addIndexColumn()
