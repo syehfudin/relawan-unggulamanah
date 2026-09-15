@@ -134,7 +134,7 @@
                         <div class="mb-3">
                             <span class="detail-label">Jumlah (Total Setor)</span>
                             <input type="hidden" name="total_setor" id="total_setor_hidden" value="0">
-                            <div class="total-box" id="total_box" style="display:none">
+                            <div class="total-box" id="total_box">
                                 <span class="label">Total</span>
                                 <span class="value" id="total_setor_display">Rp 0</span>
                             </div>
@@ -188,8 +188,7 @@
         if (items.length === 0) {
             $container.append('<div class="trx-empty">Tidak ada transaksi yang belum disetor untuk relawan ini.</div>');
             $("#total_setor_hidden").val(0);
-            $("#total_setor_hidden").prop("disabled", false);
-            $("#total_box").hide();
+            $("#total_setor_display").text(formatRupiah(0));
             return;
         }
 
@@ -205,6 +204,12 @@
                 '</div>'
             );
             $container.append(row);
+
+            // Direct binding on this row's checkbox (in addition to delegated)
+            row.find('.trx-check').on('change', function () {
+                $(this).closest('.trx-item').toggleClass('selected', $(this).is(':checked'));
+                updateTotal();
+            });
         });
 
         updateTotal();
@@ -218,17 +223,12 @@
         });
 
         $("#total_setor_hidden").val(total);
-        $("#total_setor_hidden").prop("disabled", false);
-        if (total > 0) {
-            $("#total-box").show();
-            $("#total_setor_display").text(formatRupiah(total));
-        } else {
-            $("#total-box").hide();
-        }
+        $("#total_setor_display").text(formatRupiah(total));
     };
 
-    // Checkbox change
+    // Checkbox change (delegated)
     $(document).on('change', '.trx-check', function () {
+        console.log('Checkbox changed:', this.id, 'checked:', $(this).is(':checked'));
         $(this).closest('.trx-item').toggleClass('selected', $(this).is(':checked'));
         updateTotal();
     });
