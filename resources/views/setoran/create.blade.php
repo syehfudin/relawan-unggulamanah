@@ -1,16 +1,110 @@
 @extends('layouts.app')
+@push('custom-css-files')
+<style>
+    .detail-info {
+        background-color: #f8f9fc;
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.25rem;
+    }
+    .detail-label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        color: #6c757d;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+        display: block;
+    }
+    .detail-value {
+        font-weight: 600;
+        color: #1f2937;
+    }
+    .trx-list {
+        max-height: 420px;
+        overflow-y: auto;
+        border: 1px solid #e3e6f0;
+        border-radius: 0.5rem;
+    }
+    .trx-item {
+        display: flex;
+        align-items: center;
+        padding: 0.65rem 1rem;
+        border-bottom: 1px solid #e3e6f0;
+        cursor: pointer;
+        transition: background-color 0.15s;
+    }
+    .trx-item:hover {
+        background-color: #f8f9fc;
+    }
+    .trx-item.selected {
+        background-color: #eef2ff;
+    }
+    .trx-item:last-child {
+        border-bottom: none;
+    }
+    .trx-item .trx-check {
+        margin-right: 0.9rem;
+        transform: scale(1.3);
+        cursor: pointer;
+    }
+    .trx-item .trx-date {
+        min-width: 100px;
+        color: #6c757d;
+        font-weight: 600;
+    }
+    .trx-item .trx-name {
+        flex: 1;
+        font-weight: 600;
+        color: #1f2937;
+    }
+    .trx-item .trx-nominal {
+        min-width: 130px;
+        text-align: right;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: #4f46e5;
+    }
+    .total-box {
+        background-color: #eef2ff;
+        border: 2px solid #4f46e5;
+        border-radius: 0.5rem;
+        padding: 0.75rem 1.25rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .total-box .label {
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        color: #6c757d;
+        font-weight: 700;
+    }
+    .total-box .value {
+        font-weight: 700;
+        font-size: 1.25rem;
+        color: #4f46e5;
+        font-variant-numeric: tabular-nums;
+    }
+    .trx-empty {
+        padding: 1.5rem;
+        text-align: center;
+        color: #9ca3af;
+    }
+</style>
+@endpush
 @section('content')
 <div class="container-fluid p-0">
     <div class="row">
         <div class="col-12 col-lg-12">
-            <form action="{{ $action }}" method="POST" autocomplete="off" enctype="multipart/form-data">
+            <form action="{{ $action }}" method="POST" autocomplete="off" enctype="multipart/form-data" id="form-setoran">
                 @csrf
                 <div class="card card-primary">
                     <div class="card-header">
                         <h3 class="card-title">Form {{ $title }}</h3>
                     </div>
                     <div class="card-body">
-                        @if(strtolower(Auth::user()->roles[0]->name) == 'admin')
+                        <!-- 1. Nama Relawan -->
+                        @if(strtolower($role) != 'relawan')
                         <div class="mb-3">
                             <label class="fs-6 fw-bold mb-2">
                                 <span class="required">Nama Relawan</span>
@@ -22,35 +116,51 @@
                             </select>
                         </div>
                         @else
-                            {!! Form::hidden('pegawai_id', Auth::user()->pegawai_id, array('id' => 'pegawai_id')) !!}
+                            <input type="hidden" name="pegawai_id" id="pegawai_id" value="{{ $pegawai_id }}">
                         @endif
-                        <div class="mb-3">
-                            <button type="button" class="btn btn-primary" id="add_transaksi">Tambah</button>
-                        </div>
-                        <h5>List Transaksi</h5>
-                        <div id="transaksi">
-                        </div>
+
+                        <!-- 2. List transaksi belum setoran (checkboxes) -->
                         <div class="mb-3">
                             <label class="fs-6 fw-bold mb-2">
-                                <span class="required">Total Setor</span>
+                                <span class="required">Transaksi Belum Disetor</span>
+                                <span class="text-muted fw-normal">(pilih transaksi yang disetorkan)</span>
                             </label>
-                            <input type="hidden" name="total_setor" class="form-control" id="ttl_setor" readonly>
-                            <input type="text" class="form-control" id="total_setor" readonly>
+                            <div class="trx-list" id="trx-list">
+                                <div class="trx-empty">Pilih Relawan dahulu...</div>
+                            </div>
                         </div>
+
+                        <!-- 3. Jumlah (Total Setor) -->
                         <div class="mb-3">
-                            <label class="fs-6 fw-bold mb-2">Upload File Bukti Transfer</label>
+                            <span class="detail-label">Jumlah (Total Setor)</span>
+                            <input type="hidden" name="total_setor" id="total_setor_hidden" value="0">
+                            <div class="total-box" id="total_box" style="display:none">
+                                <span class="label">Total</span>
+                                <span class="value" id="total_setor_display">Rp 0</span>
+                            </div>
+                        </div>
+
+                        <!-- 4. Upload bukti -->
+                        <div class="mb-3">
+                            <label class="fs-6 fw-bold mb-2">
+                                <span class="required">Upload File Bukti Setoran</span>
+                            </label>
                             <input
                                 type="file"
                                 name="file"
                                 id="inputImage"
-                                class="form-control @error('image') is-invalid @enderror">
+                                accept="image/*"
+                                class="form-control @error('file') is-invalid @enderror">
+                            @error('file')
+                                <span class="text-danger">{{ $message }}</span>
+                            @enderror
                         </div>
                     </div>
                     <div class="card-footer">
                         <div class="float-right">
-                            <button type="submit" class="btn btn-primary">Simpan</button>
+                            <button type="submit" class="btn btn-primary" id="btn_submit">Simpan</button>
                         </div>
-                        <a class="btn btn-primary" href="{{ $redirectUrl }}"> Back</a>
+                        <a class="btn btn-primary" href="{{ $redirectUrl }}"> <i class="fas fa-arrow-left"></i> Back</a>
                     </div>
                 </div>
             </form>
@@ -59,158 +169,101 @@
 </div>
 @endsection
 @push('custom-js-files')
-<script src="https://cdnjs.cloudflare.com/ajax/libs/handlebars.js/4.7.7/handlebars.min.js" crossorigin="anonymous"
-    integrity="sha384-dzyupbI5ULkaeg4hBWhkXonQFoXGJvULMzDu6qStcgOkh+6BDdNN9NGGfhmY4ODA"></script>
 <script type="text/javascript">
-$(document).ready(function(){
-    var template  = Handlebars.compile($("#details-template_transaksi").html());
+    // Server-rendered per-relawan transaksi map (no AJAX needed)
+    let transaksiByPegawai = {!! $transaksi_by_pegawai ? json_encode($transaksi_by_pegawai) : '{}' !!};
+    let selectedPegawai = null;
 
-    var stringToHTML = function (str) {
-        var dom = document.createElement('div');
-        dom.className = 'fv-row list_indikator';
-        dom.innerHTML = str;
-        return dom;
+    let formatRupiah = (num) => {
+        return 'Rp ' + new Intl.NumberFormat('id-ID').format(num);
     };
 
-    $("#transaksi").on('change', '.transaksi_id', function() {
-        let list_transaksi= document.getElementsByClassName('list_transaksi');
-        let nominal = $('option:selected', this).attr('nominal');
-        let i = $('.transaksi_id').index(this);
-        list_transaksi[i].getElementsByClassName("nominal")[0].setAttribute('value', "Rp "+ conCurrency(nominal));
-        total_setor();
-    });
+    // Render transaksi list for selected relawan
+    let renderTransaksiList = function (pegawaiId) {
+        let $container = $("#trx-list-container");
+        let items = transaksiByPegawai[pegawaiId] || [];
 
-    $("#transaksi").on('click', ".delete", function(){
-        var id = this;
-        $(this).parents('.list_transaksi').remove();
-        total_setor();
-    });
+        $container.empty();
 
-    let total_setor = () => {
-        let transaksi= document.getElementsByClassName('list_transaksi');
-        let total_setor = 0;
-        for (let i = 0; i < transaksi.length; i++) {
-            nominal = conCurrToNum(transaksi[i].querySelector('input[name="nominal"]').value);
-            total_setor += nominal;
-        }
-        let curr = '';
-        if(total_setor == 0){
-            curr = '';
-        }else{
-             curr = "Rp "+ conCurrency(total_setor);
-        }
-        $("#ttl_setor").val(total_setor);
-        $("#total_setor").val(curr);
-    }
-
-
-    let conCurrency = (num) => {
-        return new Intl.NumberFormat().format(num);
-    }
-
-    let conCurrToNum = (curr) => {
-        return Number(curr.replace(/[^0-9.-]+/g,""));
-    }
-
-    // Global options store — server-rendered per relawan (JSON), no AJAX dependency
-    let transaksiOptions = {!! isset($transaksi_options_js) ? $transaksi_options_js : '{}' !!};
-    if (!Array.isArray(transaksiOptions)) {
-        transaksiOptions = Object.values(transaksiOptions);
-    }
-
-    // Optional AJAX reload for relawan change (fallback safe)
-    let transaksiUrl = "{{ route('setoran.get_transaksi', ['pegawai_id' => 'PLACEHOLDER']) }}";
-
-    let loadTransaksi = (pegawaiId) => {
-        if(!pegawaiId) return;
-        let url = transaksiUrl.replace('PLACEHOLDER', pegawaiId);
-        $.getJSON(url, function(data) {
-            transaksiOptions = data;
-            populateAllSelects();
-        }).fail(function() {
-            console.error('Failed to load transaksi for pegawai', pegawaiId);
-        });
-    };
-
-    // Populate a single select element with current options
-    let populateSelect = function (selectEl) {
-        let $select = $(selectEl);
-        $select.empty().append('<option value="" nominal="0">Pilih Transaksi ...</option>');
-        $.each(transaksiOptions, function(i, item) {
-            $select.append('<option value="' + item.id + '" nominal="' + item.total_donasi + '">' + item.tanggal + ' - ' + item.nama_donatur + '</option>');
-        });
-    };
-
-    let populateAllSelects = function () {
-        $(".transaksi_id").each(function() {
-            populateSelect(this);
-        });
-    };
-
-    $(document).on('click', '#add_transaksi', function() {
-        console.log('Tambah clicked, options:', transaksiOptions.length);
-        if(!Array.isArray(transaksiOptions) || transaksiOptions.length === 0) {
-            alert('Pilih Relawan dahulu atau relawan ini tidak memiliki transaksi yang belum disetor.');
+        if (items.length === 0) {
+            $container.append('<div class="trx-empty">Tidak ada transaksi yang belum disetor untuk relawan ini.</div>');
+            $("#total_setor_hidden").val(0);
+            $("#total_setor_hidden").prop("disabled", false);
+            $("#total_setor_box").hide();
             return;
         }
-        let content = document.getElementById("transaksi");
-        let element = stringToHTML(template());
-        content.append(element);
-        populateSelect(element.querySelector('.transaksi_id'));
+
+        $.each(items, function (i, item) {
+            let row = $(
+                '<div class="trx-item" data-id="' + item.id + '" data-nominal="' + item.total_donasi + '">' +
+                    '<input type="checkbox" name="transaksi_id[]" class="trx-check" value="' + item.id + '" data-nominal="' + item.total_donasi + '" id="trx_' + item.id + '">' +
+                    '<label class="trx-check-label d-flex align-items-center flex-grow-1 mb-0" for="trx_' + item.id + '" style="cursor:pointer">' +
+                        '<span class="trx-date">' + item.tanggal + '</span>' +
+                        '<span class="trx-name">' + item.nama_donatur + '</span>' +
+                        '<span class="trx-nominal">' + formatRupiah(item.total_donasi) + '</span>' +
+                    '</label>' +
+                '</div>'
+            );
+            $container.append(row);
+        });
+
+        updateTotal();
+    };
+
+    // Update total from checked items
+    let updateTotal = function () {
+        let total = 0;
+        $(".trx-check:checked").each(function () {
+            total += parseInt($(this).data('nominal')) || 0;
+        });
+
+        $("#total_setor_hidden").val(total);
+        $("#total_setor_hidden").prop("disabled", false);
+        if (total > 0) {
+            $("#total-box").show();
+            $("#total_setor_display").text(formatRupiah(total));
+        } else {
+            $("#total-box").hide();
+        }
+    };
+
+    // Checkbox change
+    $(document).on('change', '.trx-check', function () {
+        $(this).closest('.trx-item').toggleClass('selected', $(this).is(':checked'));
+        updateTotal();
     });
 
-    // When relawan dropdown changes: clear rows, reload options
-    $("#pegawai_id").on('change', function() {
-        let pegawaiId = $(this).val();
-        $(".list_transaksi").remove();
-        $("#ttl_setor").val('');
-        $("#total_setor").val('');
-        loadTransaksi(pegawaiId);
+    // Relawan switch: render list
+    $("#pegawai_id").on('change', function () {
+        selectedPegawai = $(this).val();
+        renderTransaksiList(selectedPegawai);
     });
 
-    // On page load: load transaksi for default selected relawan (from server-rendered data first, AJAX as fallback)
-    let defaultPegawai = $("#pegawai_id").val();
-    if(defaultPegawai && transaksiOptions.length > 0) {
-        // Already have options from server render
-        console.log('Options loaded from server:', transaksiOptions.length);
-    } else if(defaultPegawai) {
-        loadTransaksi(defaultPegawai);
+    // Initial render
+    let initPegawai = $("#pegawai_id").val();
+    if (initPegawai) {
+        renderTransaksiList(initPegawai);
     }
-});
-</script>
-<script id="details-template_transaksi" type="text/x-handlebars-template">
-    <div class="row mb-3 list_transaksi">
-        <div class="col-6">
-            <label class="fs-6 fw-bold mb-2">
-                <span class="required">Transaksi</span>
-            </label>
-            <select class="form-control transaksi_id" name="transaksi_id[]">
-                <option value="" nominal="0">Pilih Transaksi ...</option>
-                @if(strtolower(Auth::user()->roles[0]->name) == 'relawan')
-                    @foreach($transaksi as $item)
-                        <option value="{{ $item->id }}" nominal="{{ $item->total_donasi }}">{{ $item->tanggal .' - '. $item->nama_donatur }}</option>
-                    @endforeach
-                @else
-                    <option value="" disabled>Pilih Relawan dahulu...</option>
-                @endif
-            </select>
-        </div>
-        <div class="col-md-5">
-            <label class="fs-6 fw-bold mb-2">
-                <span class="required">Total Nominal Donasi</span>
-            </label>
-            <input type="text" name="nominal" class="form-control nominal" value="" readonly>
-        </div>
-        <div class="col-md-1">
-            <label class="fs-6 fw-bold mb-2">
-                <span class="required">&nbsp;</span>
-            </label>
-            <button type="button" class="btn btn-outline-danger delete">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-trash-2 align-middle me-2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-            </button>
-            <label class="fs-6 fw-bold mb-2">&nbsp;
-            </label>
-        </div>
-    </div>
+
+    // Submit guard
+    $("#form-setoran").on('submit', function (e) {
+        let total = parseInt($("#total_setor_hidden").val()) || 0;
+        let hasFile = $("#inputImage").val();
+        if (total === 0) {
+            e.preventDefault();
+            alert('Pilih minimal satu transaksi untuk disetor.');
+            return false;
+        }
+        if (!hasFile) {
+            e.preventDefault();
+            alert('Upload file bukti setoran terlebih dahulu.');
+            return false;
+        }
+        // Disable submit to prevent double submit
+        $("#btn_submit").prop('disabled', true).text('Menyimpan...');
+        // Show total as formatted number for backend parse
+        $("#total_setor_hidden").val(total);
+        return true;
+    });
 </script>
 @endpush

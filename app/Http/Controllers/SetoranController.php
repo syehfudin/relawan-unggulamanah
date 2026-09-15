@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Donatur;
 use App\Models\File;
+use App\Models\Pegawai;
 use App\Models\Pekerjaan;
 use App\Models\Setoran;
 use App\Models\SetoranDetail;
@@ -169,124 +170,83 @@ class SetoranController extends Controller
         $role = strtolower(Auth::user()->roles[0]->name);
         $pegawai_id = Auth::user()->pegawai_id;
 
-        $queryTransaksi = Transaksi::leftJoin('transaksi_detail as td', 'transaksi.id', '=', 'td.transaksi_id')
-            ->leftJoin('setoran_detail as sd', 'sd.transaksi_id', '=', 'transaksi.id')
-            ->leftJoin('donatur as d', 'transaksi.donatur_id', '=', 'd.id')
-            ->whereNull('sd.id')
-            ->where('transaksi.jenis_transaksi', 'cash')
-            ->select([
-                'transaksi.id',
-                DB::raw("TO_CHAR(cast(transaksi.tanggal as date), 'dd-mm-yyyy') as tanggal"),
-                'd.nama as nama_donatur',
-                DB::raw('sum(td.nominal_donasi) as total_donasi'),
-            ])
-            ->groupBy([
-                'transaksi.id',
-                'd.nama',
-            ]);
-        if ($role == 'admin') {
-            $transaksi = $queryTransaksi->get();
+        // Base query: unsetored cash transaksi with donor info
+        $baseQuery = function () {
+            return Transaksi::leftJoin('transaksi_detail as td', 'transaksi.id', '=', 'td.transaksi_id')
+                ->leftJoin('setoran_detail as sd', 'sd.transaksi_id', '=', 'transaksi.id')
+                ->leftJoin('donatur as d', 'transaksi.donatur_id', '=', 'd.id')
+                ->whereNull('sd.id')
+                ->where('transaksi.jenis_transaksi', 'cash')
+                ->whereNotNull('transaksi.donatur_id')
+                ->select([
+                    'transaksi.id',
+                    'transaksi.pegawai_id',
+                    DB::raw("TO_CHAR(cast(transaksi.tanggal as date), 'dd-mm-yyyy') as tanggal"),
+                    'd.nama as nama_donatur',
+                    DB::raw('sum(td.nominal_donasi) as total_donasi'),
+                ])
+                ->groupBy(['transaksi.id', 'transaksi.pegawai_id', 'd.nama']);
+        };
+
+        if ($role == 'relawan') {
+            // Relawan: own transaksi only
+            $relawan = Pegawai::where('id', $pegawai_id)->get();
+            $transaksi = $baseQuery()
+                ->where('transaksi.pegawai_id', $pegawai_id)
+                ->orderBy('transaksi.tanggal', 'asc')
+                ->get();
         } elseif ($role == 'supervisor') {
-            $transaksi = $queryTransaksi->leftJoin('korel as k', function ($join) {
-                $join->on('d.pegawai_id', '=', 'k.bawahan_id');
-                $join->orOn('d.pegawai_id', '=', 'k.kepala_id', 'or');
-            })
-                ->where('k.kepala_id', $pegawai_id)->get();
+            // Supervisor: bawahan + self
+            $relawan = Pegawai::join('korel as k', function ($join) use ($pegawai_id) {
+                    $join->on('pegawai.id', '=', 'k.bawahan_id');
+                    $join->orOn('pegawai.id', '=', 'k.kepala_id', 'or');
+                })
+                ->where('k.kepala_id', $pegawai_id)
+                ->select(['pegawai.id', 'pegawai.nama'])
+                ->orderBy('pegawai.nama', 'asc')
+                ->distinct()
+                ->get();
+
+            $transaksi = $baseQuery()
+                ->leftJoin('korel as k2', function ($join) use ($pegawai_id) {
+                    $join->on('transaksi.pegawai_id', '=', 'k2.bawahan_id');
+                    $join->orOn('transaksi.pegawai_id', '=', 'k2.kepala_id', 'or');
+                })
+                ->where('k2.kepala_id', $pegawai_id)
+                ->orderBy('transaksi.tanggal', 'asc')
+                ->get();
         } else {
-            $transaksi = $queryTransaksi->where('d.pegawai_id', $pegawai_id)->get();
+            // Admin/Manager: relawan with unsetored transaksi + their transaksi grouped
+            $relawan = Pegawai::whereExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('transaksi')
+                        ->leftJoin('setoran_detail as sd', 'sd.transaksi_id', '=', 'transaksi.id')
+                        ->where('transaksi.jenis_transaksi', 'cash')
+                        ->whereNull('sd.id')
+                        ->whereColumn('transaksi.pegawai_id', 'pegawai.id');
+                })
+                ->select(['pegawai.id', 'pegawai.nama'])
+                ->orderBy('pegawai.nama', 'asc')
+                ->get();
+
+            $transaksi = $baseQuery()->orderBy('transaksi.tanggal', 'asc')->get();
         }
 
-        // Relawan dropdown: ONLY relawan who have unsetored cash transaksi
-        $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
-            ->join('model_has_roles as mhr', 'users.id', '=', 'mhr.model_id')
-            ->join('roles as r', 'r.id', '=', 'mhr.role_id')
-            ->where('r.name', 'Relawan')
-            ->whereIn('p.id', function ($sub) {
-                $sub->select('transaksi.pegawai_id')
-                    ->from('transaksi')
-                    ->leftJoin('setoran_detail as sd', 'sd.transaksi_id', '=', 'transaksi.id')
-                    ->where('transaksi.jenis_transaksi', 'cash')
-                    ->whereNull('sd.id')
-                    ->whereNotNull('transaksi.donatur_id');
-            })
-            ->select([
-                'p.id',
-                'p.nama',
-            ])
-            ->orderBy("p.nama", "asc")->get();
-
-        // Build per-pegawai transaksi options for JS (server-rendered, no AJAX dependency)
-        $transaksiAll = Transaksi::leftJoin('transaksi_detail as td', 'transaksi.id', '=', 'td.transaksi_id')
-            ->leftJoin('setoran_detail as sd', 'sd.transaksi_id', '=', 'transaksi.id')
-            ->leftJoin('donatur as d', 'transaksi.donatur_id', '=', 'd.id')
-            ->whereNull('sd.id')
-            ->where('transaksi.jenis_transaksi', 'cash')
-            ->whereNotNull('transaksi.donatur_id')
-            ->select([
-                'transaksi.id',
-                'transaksi.pegawai_id',
-                DB::raw("TO_CHAR(cast(transaksi.tanggal as date), 'dd-mm-yyyy') as tanggal"),
-                'd.nama as nama_donatur',
-                DB::raw('sum(td.nominal_donasi) as total_donasi'),
-            ])
-            ->groupBy(['transaksi.id', 'transaksi.pegawai_id', 'd.nama'])
-            ->orderBy('transaksi.tanggal', 'asc')
-            ->get();
-
-        $transaksi_options_js = [];
-        foreach ($transaksiAll as $trx) {
-            $transaksi_options_js[$trx->pegawai_id][] = [
+        // Group transaksi by pegawai for server-side JS mapping (checkbox switch)
+        $transaksi_by_pegawai = [];
+        foreach ($transaksi as $trx) {
+            $transaksi_by_pegawai[$trx->pegawai_id][] = [
                 'id' => $trx->id,
                 'tanggal' => $trx->tanggal,
                 'nama_donatur' => $trx->nama_donatur,
                 'total_donasi' => (int) $trx->total_donasi,
             ];
         }
-        $transaksi_options_js = json_encode($transaksi_options_js ?? []);
 
-        return view('setoran.create', compact('title', 'action', 'redirectUrl', 'relawan', 'transaksi', 'transaksi_options_js'));
-    }
-
-    /**
-     * AJAX: Get unsetored cash transaksi for a specific relawan.
-     */
-    public function getUnsetoredTransaksi($pegawai_id)
-    {
-        $role = strtolower(Auth::user()->roles[0]->name);
-        $myPegawaiId = Auth::user()->pegawai_id;
-
-        if (in_array($role, ['admin', 'manager'])) {
-            // Can fetch any relawan's transaksi
-        } elseif ($role == 'supervisor') {
-            $isBawahan = DB::table('korel')
-                ->where('kepala_id', $myPegawaiId)
-                ->where('bawahan_id', $pegawai_id)
-                ->exists();
-            if (!$isBawahan && $pegawai_id != $myPegawaiId) {
-                return response()->json([]);
-            }
-        } else {
-            $pegawai_id = $myPegawaiId;
-        }
-
-        $transaksi = Transaksi::leftJoin('transaksi_detail as td', 'transaksi.id', '=', 'td.transaksi_id')
-            ->leftJoin('setoran_detail as sd', 'sd.transaksi_id', '=', 'transaksi.id')
-            ->leftJoin('donatur as d', 'transaksi.donatur_id', '=', 'd.id')
-            ->whereNull('sd.id')
-            ->where('transaksi.jenis_transaksi', 'cash')
-            ->where('transaksi.pegawai_id', $pegawai_id)
-            ->whereNotNull('transaksi.donatur_id')
-            ->select([
-                'transaksi.id',
-                DB::raw("TO_CHAR(cast(transaksi.tanggal as date), 'dd-mm-yyyy') as tanggal"),
-                'd.nama as nama_donatur',
-                DB::raw('sum(td.nominal_donasi) as total_donasi'),
-            ])
-            ->groupBy(['transaksi.id', 'd.nama'])
-            ->orderBy('transaksi.tanggal', 'asc')
-            ->get();
-
-        return response()->json($transaksi);
+        return view('setoran.create', compact(
+            'title', 'action', 'redirectUrl',
+            'relawan', 'transaksi_by_pegawai', 'role', 'pegawai_id'
+        ));
     }
 
     /**
