@@ -180,7 +180,7 @@
 
     // Render transaksi list for selected relawan
     let renderTransaksiList = function (pegawaiId) {
-        let $container = $("#trx-list-container");
+        let $container = $("#trx-list");
         let items = transaksiByPegawai[pegawaiId] || [];
 
         $container.empty();
@@ -189,7 +189,7 @@
             $container.append('<div class="trx-empty">Tidak ada transaksi yang belum disetor untuk relawan ini.</div>');
             $("#total_setor_hidden").val(0);
             $("#total_setor_hidden").prop("disabled", false);
-            $("#total_setor_box").hide();
+            $("#total_box").hide();
             return;
         }
 
