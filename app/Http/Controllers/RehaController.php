@@ -98,6 +98,9 @@ class RehaController extends Controller
             ];
         }
 
+        // Load program list for deal sections
+        $program = DB::table('program')->select(['id', 'nama'])->orderBy('id', 'asc')->get();
+
         // Relawan with donatur only (for dropdown, relawan role sees self)
         if ($role != 'relawan') {
             $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
@@ -118,7 +121,7 @@ class RehaController extends Controller
                 ->get();
         }
 
-        return view('reha.create', compact('title', 'action', 'redirectUrl', 'relawan', 'donatur_by_pegawai', 'role'));
+        return view('reha.create', compact('title', 'action', 'redirectUrl', 'relawan', 'donatur_by_pegawai', 'role', 'program'));
     }
 
     public function store(Request $request)
@@ -154,11 +157,39 @@ class RehaController extends Controller
         $input['tanggal'] = date('Y-m-d', strtotime($request->input('tanggal')));
 
         // Checklist donatur lama yang dikunjungi (array of donatur ids)
-        $input['realisasi_donatur_lama_ids'] = json_encode($request->input('realisasi_donatur_lama_ids', []) ?: []);
+        $checklistIds = $request->input('realisasi_donatur_lama_ids', []) ?: [];
+        $input['realisasi_donatur_lama_ids'] = json_encode($checklistIds);
+        // Realisasi donatur lama = jumlah dari checklist (auto)
+        $input['realisasi_donatur_lama'] = count($checklistIds);
 
-        // Nominal deal hari ini
-        $input['deal_donatur_lama_nominal'] = (int) str_replace(',', '', $request->input('deal_donatur_lama_nominal', 0) ?: 0);
-        $input['deal_donatur_baru_nominal'] = (int) str_replace(',', '', $request->input('deal_donatur_baru_nominal', 0) ?: 0);
+        // Deal program rows: [{program_id, nominal}, ...]
+        $dealLamaPrograms = [];
+        $dealLamaPids = $request->input('deal_lama_program_id', []);
+        $dealLamaNominals = $request->input('deal_lama_nominal', []);
+        $dealLamaTotal = 0;
+        foreach ($dealLamaPids as $i => $pid) {
+            $nom = (int) str_replace(',', '', $dealLamaNominals[$i] ?? 0);
+            if ($pid && $nom > 0) {
+                $dealLamaPrograms[] = ['program_id' => (int) $pid, 'nominal' => $nom];
+                $dealLamaTotal += $nom;
+            }
+        }
+        $input['deal_donatur_lama_programs'] = json_encode($dealLamaPrograms);
+        $input['deal_donatur_lama_nominal'] = $dealLamaTotal;
+
+        $dealBaruPrograms = [];
+        $dealBaruPids = $request->input('deal_baru_program_id', []);
+        $dealBaruNominals = $request->input('deal_baru_nominal', []);
+        $dealBaruTotal = 0;
+        foreach ($dealBaruPids as $i => $pid) {
+            $nom = (int) str_replace(',', '', $dealBaruNominals[$i] ?? 0);
+            if ($pid && $nom > 0) {
+                $dealBaruPrograms[] = ['program_id' => (int) $pid, 'nominal' => $nom];
+                $dealBaruTotal += $nom;
+            }
+        }
+        $input['deal_donatur_baru_programs'] = json_encode($dealBaruPrograms);
+        $input['deal_donatur_baru_nominal'] = $dealBaruTotal;
 
         // Ubah array jenis_akad menjadi JSON sebelum disimpan (optional now)
         if (isset($input['jenis_akad']) && is_array($input['jenis_akad'])) {

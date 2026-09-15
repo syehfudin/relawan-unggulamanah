@@ -14,9 +14,11 @@ class Reha extends Model
 
     protected $casts = [
         'realisasi_donatur_lama_ids' => 'array',
+        'deal_donatur_lama_programs' => 'array',
+        'deal_donatur_baru_programs' => 'array',
     ];
 
     protected $fillable = [
-        'tanggal', 'pegawai_id', 'renku_donatur_lama', 'renku_donatur_baru', 'realisasi_donatur_lama', 'realisasi_donatur_baru', 'fu_donatur_lama', 'fu_donatur_baru', 'deal_donatur_lama', 'deal_donatur_baru', 'jenis_akad', 'realisasi_donatur_lama_ids', 'deal_donatur_lama_nominal', 'deal_donatur_baru_nominal'
+        'tanggal', 'pegawai_id', 'renku_donatur_lama', 'renku_donatur_baru', 'realisasi_donatur_lama', 'realisasi_donatur_baru', 'fu_donatur_lama', 'fu_donatur_baru', 'deal_donatur_lama', 'deal_donatur_baru', 'jenis_akad', 'realisasi_donatur_lama_ids', 'deal_donatur_lama_nominal', 'deal_donatur_baru_nominal', 'deal_donatur_lama_programs', 'deal_donatur_baru_programs'
     ];
 }

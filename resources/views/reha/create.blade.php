@@ -119,8 +119,8 @@
                         <div class="section-title">REALISASI KUNJUNGAN</div>
                         <div class="row mb-3">
                             <div class="col-12 col-md-6">
-                                <label>Donatur Lama</label>
-                                <input type="number" min="0" class="form-control" name="realisasi_donatur_lama" value="{{ @$reha->realisasi_donatur_lama ?? 0 }}">
+                                <label>Donatur Lama <span class="text-muted fw-normal">(otomatis dari checklist)</span></label>
+                                <input type="number" min="0" class="form-control" name="realisasi_donatur_lama" id="realisasi_donatur_lama" value="{{ @$reha->realisasi_donatur_lama ?? 0 }}" readonly style="background-color:#eef2ff;font-weight:600">
                             </div>
                             <div class="col-12 col-md-6">
                                 <label>Donatur Baru</label>
@@ -156,27 +156,41 @@
                             </div>
                         </div>
 
-                        <!-- 4. DEAL HARI INI -->
-                        <div class="section-title deal-section">DEAL HARI INI</div>
-                        <div class="row mb-3 deal-section">
+                        <div class="row mb-2 deal-section">
                             <div class="col-12 col-md-6">
-                                <label>Donatur Lama â€” Jumlah Deal</label>
+                                <label class="fw-bold">Donatur Lama - Jumlah Deal</label>
                                 <input type="number" min="0" class="form-control" name="deal_donatur_lama" id="deal_donatur_lama" value="{{ @$reha->deal_donatur_lama ?? 0 }}">
                             </div>
                             <div class="col-12 col-md-6">
-                                <label>Donatur Lama â€” Nominal (Rp)</label>
-                                <input type="number" min="0" class="form-control" name="deal_donatur_lama_nominal" value="{{ @$reha->deal_donatur_lama_nominal ?? 0 }}">
-                            </div>
-                            <div class="col-12 col-md-6 mt-2">
-                                <label>Donatur Baru â€” Jumlah Deal</label>
+                                <label class="fw-bold">Donatur Baru - Jumlah Deal</label>
                                 <input type="number" min="0" class="form-control" name="deal_donatur_baru" id="deal_donatur_baru" value="{{ @$reha->deal_donatur_baru ?? 0 }}">
                             </div>
-                            <div class="col-12 col-md-6 mt-2">
-                                <label>Donatur Baru â€” Nominal (Rp)</label>
-                                <input type="number" min="0" class="form-control" name="deal_donatur_baru_nominal" value="{{ @$reha->deal_donatur_baru_nominal ?? 0 }}">
-                            </div>
                         </div>
-                    </div>
+
+                        <!-- Donatur Lama: program rows -->
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <label class="fw-bold mb-0 mr-2">Donatur Lama - Detail Program & Nominal</label>
+                                <span class="donatur-counter ml-2">Total: <span class="count" id="deal_lama_total">Rp 0</span></span>
+                            </div>
+                            <div id="deal_lama_rows"></div>
+                            <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="add_deal_lama">
+                                <i class="fas fa-plus"></i> Tambahkan Program
+                            </button>
+                        </div>
+
+                        <!-- Donatur Baru: program rows -->
+                        <div class="mb-3">
+                            <div class="d-flex align-items-center mb-2">
+                                <label class="fw-bold mb-0 mr-2">Donatur Baru - Detail Program & Nominal</label>
+                                <span class="donatur-counter ml-2">Total: <span class="count" id="deal_baru_total">Rp 0</span></span>
+                            </div>
+                            <div id="deal_baru_rows"></div>
+                            <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="add_deal_baru">
+                                <i class="fas fa-plus"></i> Tambahkan Program
+                            </button>
+                        </div>
+
                     <div class="card-footer">
                         <div class="float-right">
                             <button type="submit" class="btn btn-primary" id="btn_submit">Simpan</button>
@@ -251,6 +265,8 @@
         let updateVisitCounter = function () {
             let count = $("#donatur-list .donatur-check:checked").length;
             $("#visit_counter").text(count);
+            // Auto-sync realisasi donatur lama = checklist count
+            $("#realisasi_donatur_lama").val(count);
         };
 
         // Checklist toggle (delegated)
@@ -289,6 +305,57 @@
         };
 
         $("#deal_donatur_lama, #deal_donatur_baru").on('change', checkDeal);
+
+        // ===== Deal Program Rows (max 10 per type) =====
+        const MAX_DEAL_ROWS = 10;
+
+        const PROGRAM_OPTIONS = '{!! $program->map(function ($p) { return "<option value='" . $p->id . "'>" . e($p->nama) . "</option>"; })->implode("") !!}';
+
+        let addDealRow = function (type) {
+            let containerId = '#deal_' + type + '_rows';
+            let rows = $(containerId + ' .deal-row').length;
+            if (rows >= MAX_DEAL_ROWS) {
+                alert('Maksimal 10 program untuk deal hari ini.');
+                return;
+            }
+
+            let html =
+                '<div class="deal-row row align-items-center mb-2">' +
+                    '<div class="col-5">' +
+                        '<select class="form-control" name="deal_' + type + '_program_id[]">' +
+                            '<option value="">Pilih Program...</option>' +
+                            PROGRAM_OPTIONS +
+                        '</select>' +
+                    '</div>' +
+                    '<div class="col-5">' +
+                        '<input type="number" min="0" class="form-control" placeholder="Nominal (Rp)" name="deal_' + type + '_nominal[]" oninput="updateDealTotal(\'' + type + '\')">' +
+                    '</div>' +
+                    '<div class="col-2">' +
+                        '<button type="button" class="btn btn-outline-danger btn-sm remove-deal-row">X</button>' +
+                    '</div>' +
+                '</div>';
+            $(containerId).append(html);
+        };
+
+        $(document).on('click', '#add_deal_lama', function () { addDealRow('lama'); });
+        $(document).on('click', '#add_deal_baru', function () { addDealRow('baru'); });
+
+        $(document).on('click', '.remove-deal-row', function () {
+            let type = $(this).closest('.deal-row').data('type');
+            $(this).closest('.deal-row').remove();
+            updateDealTotal(type);
+        });
+
+        let updateDealTotal = function (type) {
+            let total = 0;
+            $("#deal_" + type + "_rows .deal-row").each(function () {
+                let nom = parseInt($(this).find('input[name="deal_' + type + '_nominal[]"]').val()) || 0;
+                total += nom;
+            });
+            $("#deal_" + type + "_total").text(formatNum(total));
+        };
+
+        window.updateDealTotal = updateDealTotal;
 
         // Prevent double submit
         $("#form-reha, #form-setoran").on('submit', function () {
