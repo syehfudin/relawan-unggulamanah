@@ -5,11 +5,51 @@
 <link rel="stylesheet" href="{{ asset('plugins/datatables-buttons/css/buttons.bootstrap4.min.css') }}">
 @endpush
 @section('content')
+@php
+    $userRole = strtolower(Auth::user()->roles[0]->name);
+    $myPegawaiId = Auth::user()->pegawai_id;
+@endphp
 <div class="container-fluid">
     <div class="d-flex align-items-center py-2 py-md-2">
         @can('transaksi-create')
         <a class="btn btn-success" href="{{ route('transaksi.create') }}"> Tambah Transaksi</a>
         @endcan
+    </div>
+    <!-- Filter Panel -->
+    <div class="card card-primary card-outline">
+        <div class="card-header">
+            <h3 class="card-title"><i class="fas fa-filter"></i> Filter Data</h3>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-end">
+                <div class="col-12 col-md-3">
+                    <label class="fs-6 fw-bold mb-1">Tanggal Mulai</label>
+                    <input type="text" class="form-control" id="filter_date_from" placeholder="dd-mm-yyyy" autocomplete="off">
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="fs-6 fw-bold mb-1">Tanggal Sampai</label>
+                    <input type="text" class="form-control" id="filter_date_to" placeholder="dd-mm-yyyy" autocomplete="off">
+                </div>
+                @if($userRole != 'relawan')
+                <div class="col-12 col-md-3">
+                    <label class="fs-6 fw-bold mb-1">Nama Relawan</label>
+                    <select class="form-control" id="filter_pegawai">
+                        <option value="">Semua Relawan</option>
+                        @foreach($relawan as $item)
+                            <option value="{{ $item->id }}">{{ $item->nama }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                @else
+                <input type="hidden" id="filter_pegawai" value="{{ $myPegawaiId }}">
+                @endif
+                <div class="col-12 col-md-3">
+                    <button type="button" class="btn btn-primary btn-block" id="btn_apply_filter">
+                        <i class="fas fa-search"></i> Terapkan Filter
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
     <div class="row">
         <div class="col-12 col-lg-12">
@@ -55,6 +95,10 @@
     let dataUrl = "{{ route('transaksi.index_data') }}";
     let tableSelector = "datatable-transaksi";
 
+    // Datepicker for filters
+    $("#filter_date_from").datepicker({ dateFormat: 'dd-mm-yy' });
+    $("#filter_date_to").datepicker({ dateFormat: 'dd-mm-yy' });
+
     dt = $("#" + tableSelector).DataTable({
         order: [1, 'desc'],
         columnDefs: [
@@ -83,7 +127,14 @@
         "processing": true,
         "serverSide": true,
         "searching": true,
-        "ajax": dataUrl,
+        "ajax": {
+            "url": dataUrl,
+            "data": function (d) {
+                d.date_from = $("#filter_date_from").val();
+                d.date_to = $("#filter_date_to").val();
+                d.pegawai_id = $("#filter_pegawai").val() || "";
+            }
+        },
         columns: [
             { data: "DT_RowIndex", name: "DT_RowIndex" },
             { data: "tanggal_donasi", name: "tanggal_donasi" },
@@ -101,5 +152,17 @@
         ],
     });
     table = dt.$;
+
+    // Apply filter button: reload table with filter values
+    $("#btn_apply_filter").on('click', function() {
+        dt.ajax.reload();
+    });
+
+    // Also apply filter on Enter key in date fields
+    $("#filter_date_from, #filter_date_to").on('keypress', function(e) {
+        if (e.which === 13) {
+            dt.ajax.reload();
+        }
+    });
 </script>
 @endpush

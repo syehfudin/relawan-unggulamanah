@@ -41,7 +41,36 @@ class TransaksiController extends Controller
         // $SheetService->storeSheet();
         $title = $this->title;
 
-        return view('transaksi.index', compact('title'));
+        // Load relawan list for filter dropdown (admin/manager/supervisor only)
+        $role = strtolower(Auth::user()->roles[0]->name);
+        $myPegawaiId = Auth::user()->pegawai_id;
+        if ($role == 'relawan') {
+            $relawan = Pegawai::where('id', $myPegawaiId)->get();
+        } elseif ($role == 'supervisor') {
+            $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
+                ->join('model_has_roles as mhr', 'users.id', '=', 'mhr.model_id')
+                ->join('roles as r', 'r.id', '=', 'mhr.role_id')
+                ->join('korel as k', function ($join) {
+                    $join->on('p.id', '=', 'k.bawahan_id');
+                    $join->orOn('p.id', '=', 'k.kepala_id', 'or');
+                })
+                ->where('k.kepala_id', $myPegawaiId)
+                ->where('r.name', 'Relawan')
+                ->select(['p.id', 'p.nama'])
+                ->orderBy('p.nama', 'asc')
+                ->distinct()
+                ->get();
+        } else {
+            $relawan = User::join('pegawai as p', 'users.pegawai_id', '=', 'p.id')
+                ->join('model_has_roles as mhr', 'users.id', '=', 'mhr.model_id')
+                ->join('roles as r', 'r.id', '=', 'mhr.role_id')
+                ->where('r.name', 'Relawan')
+                ->select(['p.id', 'p.nama'])
+                ->orderBy('p.nama', 'asc')
+                ->get();
+        }
+
+        return view('transaksi.index', compact('title', 'relawan'));
     }
 
     /**
@@ -49,7 +78,7 @@ class TransaksiController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function indexData()
+    public function indexData(Request $request)
     {
         $role = strtolower(Auth::user()->roles[0]->name);
         $query = Transaksi::leftJoin('transaksi_detail as td', 'transaksi.id', '=', 'td.transaksi_id')
@@ -73,6 +102,7 @@ class TransaksiController extends Controller
                 'transaksi.keterangan',
             ]);
 
+        // Role-based access filter
         if (in_array($role, ['admin', 'manager'])) {
             // No filter - show all
         } elseif ($role == 'relawan') {
@@ -85,7 +115,47 @@ class TransaksiController extends Controller
             ->where('k.kepala_id', Auth::user()->pegawai_id);
         }
 
+        // Date filter: single date or range (input format dd-mm-yyyy)
+        $dateFrom = $request->input('date_from');
+        $dateTo = $request->input('date_to');
+
+        if ($dateFrom) {
+            $query->where('transaksi.tanggal', '>=', date('Y-m-d', strtotime($dateFrom)));
+        }
+        if ($dateTo) {
+            $query->where('transaksi.tanggal', '<=', date('Y-m-d', strtotime($dateTo)));
+        }
+
+        // Relawan filter (only meaningful for admin/manager/supervisor)
+        $filterPegawai = $request->input('pegawai_id');
+        if ($filterPegawai && !in_array($role, ['relawan'])) {
+            if ($role == 'supervisor') {
+                // Supervisor can only filter their bawahan or self
+                $isBawahan = DB::table('korel')
+                    ->where('kepala_id', Auth::user()->pegawai_id)
+                    ->where('bawahan_id', $filterPegawai)
+                    ->exists();
+                if ($filterPegawai == Auth::user()->pegawai_id || $isBawahan) {
+                    $query->where('transaksi.pegawai_id', $filterPegawai);
+                }
+            } else {
+                $query->where('transaksi.pegawai_id', $filterPegawai);
+            }
+        }
+
         return Datatables::of($query)
+            ->filter(function ($query) use ($request, $role) {
+                // Custom global search: prioritize donatur name
+                if ($request->has('search') && $search = $request->input('search.value')) {
+                    $query->where(function ($q) use ($search) {
+                        // Priority 1: donatur name (ILIKE, case-insensitive)
+                        $q->where('d.nama', 'ILIKE', "%{$search}%");
+                        // Also match relawan name and keterangan
+                        $q->orWhere('p.nama', 'ILIKE', "%{$search}%");
+                        $q->orWhere('transaksi.keterangan', 'ILIKE', "%{$search}%");
+                    });
+                }
+            })
             ->addIndexColumn()
             ->addColumn('action', function ($transaksi) {
                 return view('transaksi.action', compact('transaksi'));
@@ -93,11 +163,8 @@ class TransaksiController extends Controller
             ->rawColumns(['action'])
             ->make(true);
     }
-
-
     /**
      * Show the form for creating a new resource.
-     *
      * @return \Illuminate\Http\Response
      */
     public function create()
