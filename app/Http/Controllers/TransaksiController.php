@@ -221,16 +221,29 @@ class TransaksiController extends Controller
 
         request()->validate($validation, $message);
 
-        // Duplicate check: prevent same transaksi being submitted twice
+        // Duplicate check: same tanggal + relawan + donatur + keterangan + program:nominal composition
         $dupTanggal = date('Y-m-d', strtotime($request->input('tanggal')));
         $dupDonaturId = $checkDonatur == 'baru' ? null : $request->input('donatur_id');
         $dupKeterangan = $request->input('keterangan');
 
+        // Build input signature: tanggal|pegawai|donatur|jenis|keterangan|program:nominal,...
+        $progNominal = [];
+        $nominal = $request->input('nominal_donasi', []);
+        $programIds = $request->input('program_id', []);
+        foreach ($programIds as $i => $pid) {
+            $nom = $this->convertCurrenctToInt($nominal[$i] ?? 0);
+            if ($nom > 0) {
+                $progNominal[] = $pid . ':' . $nom;
+            }
+        }
+        sort($progNominal);
+        $inputSignature = $dupTanggal . '|' . (strtolower(Auth::user()->roles[0]->name) == 'admin' ? $request->input('pegawai_id') : Auth::user()->pegawai_id) . '|' . ($checkDonatur == 'baru' ? strtolower($request->input('nama')) : $dupDonaturId) . '|' . $jenis_transaksi . '|' . ($dupKeterangan ?? '') . '|' . implode(',', $progNominal);
+
+        // Query existing transaksi with same base (tanggal+pegawai+donatur+jenis+keterangan)
         $dupQuery = Transaksi::where('tanggal', $dupTanggal)
             ->where('jenis_transaksi', $jenis_transaksi);
 
         if ($checkDonatur == 'baru') {
-            // For new donatur: check by name (case-insensitive) once donatur is known
             $dupQuery->whereIn('donatur_id', function ($sub) use ($request) {
                 $sub->select('id')
                     ->from('donatur')
@@ -251,32 +264,30 @@ class TransaksiController extends Controller
             : Auth::user()->pegawai_id;
         $dupQuery->where('pegawai_id', $pegawaiIdForCheck);
 
-        $dupExists = (clone $dupQuery)->exists();
+        $dupCandidates = (clone $dupQuery)->get();
 
-        // Nominal sum check: same transaksi characteristics + same nominal = definite duplicate
-        if (!$dupExists) {
-            $dupWithNominal = (clone $dupQuery)->get();
-            $inputNominalSum = 0;
-            foreach ($request->input('nominal_donasi', []) as $nml) {
-                $inputNominalSum += $this->convertCurrenctToInt($nml);
-            }
-            foreach ($dupWithNominal as $existing) {
-                $existingSum = DB::table('transaksi_detail')
-                    ->where('transaksi_id', $existing->id)
-                    ->sum('nominal_donasi');
-                if ($existingSum == $inputNominalSum) {
-                    $dupExists = true;
-                    break;
-                }
+        // Compare program:nominal composition for each candidate
+        $dupExists = false;
+        foreach ($dupCandidates as $candidate) {
+            $existingSig = DB::table('transaksi_detail')
+                ->where('transaksi_id', $candidate->id)
+                ->orderBy('program_id')
+                ->get()
+                ->map(fn ($td) => $td->program_id . ':' . $td->nominal_donasi)
+                ->sort()
+                ->implode(',');
+
+            if (implode(',', $progNominal) === $existingSig) {
+                $dupExists = true;
+                break;
             }
         }
 
         if ($dupExists) {
             return redirect()->route('transaksi.index')
-                ->with('error', 'Transaksi duplikat terdeteksi! Transaksi dengan tanggal, donatur, jenis, dan nominal yang sama sudah ada di database.')
+                ->with('error', 'Transaksi duplikat terdeteksi! Transaksi dengan tanggal, relawan, donatur, keterangan, program, dan nominal yang sama sudah ada di database.')
                 ->withInput();
         }
-
 
         // Save to DB first (transaction), then sync to Google Sheet separately
         $syncData = DB::transaction(function () use ($request, $checkDonatur, $jenis_transaksi) {
