@@ -221,6 +221,63 @@ class TransaksiController extends Controller
 
         request()->validate($validation, $message);
 
+        // Duplicate check: prevent same transaksi being submitted twice
+        $dupTanggal = date('Y-m-d', strtotime($request->input('tanggal')));
+        $dupDonaturId = $checkDonatur == 'baru' ? null : $request->input('donatur_id');
+        $dupKeterangan = $request->input('keterangan');
+
+        $dupQuery = Transaksi::where('tanggal', $dupTanggal)
+            ->where('jenis_transaksi', $jenis_transaksi);
+
+        if ($checkDonatur == 'baru') {
+            // For new donatur: check by name (case-insensitive) once donatur is known
+            $dupQuery->whereIn('donatur_id', function ($sub) use ($request) {
+                $sub->select('id')
+                    ->from('donatur')
+                    ->whereRaw('LOWER(nama) = ?', [strtolower($request->input('nama'))]);
+            });
+        } else {
+            $dupQuery->where('donatur_id', $dupDonaturId);
+        }
+
+        if ($dupKeterangan) {
+            $dupQuery->whereRaw("COALESCE(keterangan, '') = ?", [$dupKeterangan]);
+        } else {
+            $dupQuery->whereRaw("COALESCE(keterangan, '') = ''");
+        }
+
+        $pegawaiIdForCheck = strtolower(Auth::user()->roles[0]->name) == 'admin'
+            ? $request->input('pegawai_id')
+            : Auth::user()->pegawai_id;
+        $dupQuery->where('pegawai_id', $pegawaiIdForCheck);
+
+        $dupExists = (clone $dupQuery)->exists();
+
+        // Nominal sum check: same transaksi characteristics + same nominal = definite duplicate
+        if (!$dupExists) {
+            $dupWithNominal = (clone $dupQuery)->get();
+            $inputNominalSum = 0;
+            foreach ($request->input('nominal_donasi', []) as $nml) {
+                $inputNominalSum += $this->convertCurrenctToInt($nml);
+            }
+            foreach ($dupWithNominal as $existing) {
+                $existingSum = DB::table('transaksi_detail')
+                    ->where('transaksi_id', $existing->id)
+                    ->sum('nominal_donasi');
+                if ($existingSum == $inputNominalSum) {
+                    $dupExists = true;
+                    break;
+                }
+            }
+        }
+
+        if ($dupExists) {
+            return redirect()->route('transaksi.index')
+                ->with('error', 'Transaksi duplikat terdeteksi! Transaksi dengan tanggal, donatur, jenis, dan nominal yang sama sudah ada di database.')
+                ->withInput();
+        }
+
+
         // Save to DB first (transaction), then sync to Google Sheet separately
         $syncData = DB::transaction(function () use ($request, $checkDonatur, $jenis_transaksi) {
             if (strtolower(Auth::user()->roles[0]->name) == 'admin') {
