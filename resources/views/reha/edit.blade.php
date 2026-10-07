@@ -112,7 +112,7 @@
 
 
                                 <div id="jenis_akad">
-                                    @foreach (json_decode($reha->jenis_akad) as $jenis_akad)
+                                    @foreach (is_array(json_decode($reha->jenis_akad ?? '[]', true)) ? json_decode($reha->jenis_akad ?? '[]', true) : [] as $jenis_akad)
                                         <div style="display: flex; align-items:center;" class="list_jenisAkad mb-3">
                                             <input type="text" class="form-control mr-3" name="jenis_akad[]"
                                                 {{ @$show }} value="{{ $jenis_akad }}">

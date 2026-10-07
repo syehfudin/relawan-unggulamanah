@@ -140,7 +140,7 @@ Route::group(['middleware' => ['auth']], function () {
         Route::get('/create', [RehaController::class, 'create'])->name('reha.create');
         Route::post('/', [RehaController::class, 'store'])->name('reha.store');
         Route::get('/show/{id}', [RehaController::class, 'show'])->name('reha.show');
-        Route::get('/edit//{id}', [RehaController::class, 'edit'])->name('reha.edit');
+        Route::get('/edit/{id}', [RehaController::class, 'edit'])->name('reha.edit');
         Route::post('/update/{id}', [RehaController::class, 'update'])->name('reha.update');
         Route::delete('/{id}', [RehaController::class, 'destroy'])->name('reha.destroy');
         Route::get('/index_data', [RehaController::class, 'indexData'])->name('reha.index_data');
