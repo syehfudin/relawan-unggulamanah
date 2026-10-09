@@ -383,11 +383,12 @@ class TransaksiController extends Controller
 
             if ($jenis_transaksi == 'transfer') {
                 $image = $request->file('image');
-                $destinationPath = 'storage/image/transaksi/';
+                $relativePath = 'storage/image/transaksi/';
+                $destinationPath = public_path('storage/image/transaksi/');
                 $filename = date('YmdHis') . '.' . $image->getClientOriginalExtension();
                 $image->move($destinationPath, $filename);
                 $fileData['jenis'] = 'Transaksi';
-                $fileData['path'] = $destinationPath;
+                $fileData['path'] = $relativePath;
                 $fileData['nama'] = $filename;
                 $file = Files::create($fileData);
                 $t['file_id'] = $file->id;

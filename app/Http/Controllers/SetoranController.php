@@ -274,11 +274,12 @@ class SetoranController extends Controller
             }
 
             $image = $request->file('file');
-            $destinationPath = 'storage/image/setoran/';
+            $relativePath = 'storage/image/setoran/';
+            $destinationPath = public_path('storage/image/setoran/');
             $filename = date('YmdHis') . '.' . $image->getClientOriginalExtension();
             $image->move($destinationPath, $filename);
             $fileData['jenis'] = 'Setoran';
-            $fileData['path'] = $destinationPath;
+            $fileData['path'] = $relativePath;
             $fileData['nama'] = $filename;
             $file = File::create($fileData);
 

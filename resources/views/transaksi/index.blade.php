@@ -162,7 +162,7 @@
             }
         },
         columns: [
-            { data: "DT_RowIndex", name: "DT_RowIndex" },
+            { data: "DT_RowIndex", name: "DT_RowIndex", orderable: false, searchable: false },
             { data: "tanggal_donasi", name: "tanggal_donasi" },
             { data: "nama_relawan", name: "nama_relawan" },
             { data: "nama_donatur", name: "nama_donatur" },

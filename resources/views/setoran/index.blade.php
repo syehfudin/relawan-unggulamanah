@@ -206,7 +206,7 @@
             }
         },
         columns: [
-            { data: "DT_RowIndex", name: "DT_RowIndex" },
+            { data: "DT_RowIndex", name: "DT_RowIndex", orderable: false, searchable: false },
             { data: "tanggal_setoran", name: "tanggal_setoran" },
             { data: "nama_pegawai", name: "nama_pegawai" },
             { data: "total_donasi", name: "total_donasi", render: $.fn.dataTable.render.number( ',', '.', 0, 'Rp ' ) },
